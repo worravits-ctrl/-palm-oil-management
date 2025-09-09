@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>ภาพรวม</h2>
+<div class="grid">
+  <div class="card">
+    <h3>รายได้จากการตัดปาล์ม</h3>
+    <p>{{ "{:,.2f}".format(total_income or 0) }} บาท</p>
+  </div>
+  <div class="card">
+    <h3>ค่าใช้จ่ายปุ๋ยรวม</h3>
+    <p>{{ "{:,.2f}".format(total_expense or 0) }} บาท</p>
+  </div>
+  <div class="card">
+    <h3>จำนวนทะลายที่บันทึก</h3>
+    <p>{{ total_bunches or 0 }} ทะลาย</p>
+  </div>
+</div>
+<p style="margin-top:1rem;">เคล็ดลับ: ราคาปาล์มเฉลี่ย 5–10 บาท/กก. สามารถปรับในฟอร์มรายได้ตามจริงทุกครั้งที่บันทึก</p>
+{% endblock %}

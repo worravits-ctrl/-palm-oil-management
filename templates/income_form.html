@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>บันทึกรายได้การตัดปาล์ม</h2>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="row">
+    <label for="date_input">วันที่ขายปาล์ม</label>
+    {{ form.date(class="input", value=form.date.data.strftime('%Y-%m-%d') if form.date.data else '', id="date_input") }}
+    <span id="thai_year" style="margin-left:10px;color:#6ed0ff;font-weight:bold;"></span>
+  </div>
+  <script>
+    function updateThaiYear(){
+      const dateVal = document.getElementById('date_input').value;
+      if(dateVal){
+        const y = parseInt(dateVal.split('-')[0]);
+        document.getElementById('thai_year').innerText = 'ปี พ.ศ. ' + (y+543);
+      }else{
+        document.getElementById('thai_year').innerText = '';
+      }
+    }
+    document.getElementById('date_input').addEventListener('input', updateThaiYear);
+    updateThaiYear();
+  </script>
+  <div class="row">{{ form.total_weight_kg.label }} {{ form.total_weight_kg(class="input", id="total_weight") }}</div>
+  <div class="row">{{ form.price_per_kg.label }} {{ form.price_per_kg(class="input", id="price_per_kg") }}</div>
+  <div class="row">รวมเป็นเงิน (บาท): <input class="input" id="gross_amount_display" readonly></div>
+  {{ form.gross_amount(id="gross_amount", style="display:none;") }}
+  <div class="row">{{ form.harvesting_wage.label }} {{ form.harvesting_wage(class="input", id="wage") }}</div>
+  <div class="row">ยอดเงินคงเหลือ (บาท): <input class="input" id="net_amount" readonly></div>
+  <div class="row">{{ form.note.label }} {{ form.note(class="input") }}</div>
+  {{ form.submit(class="btn") }}
+</form>
+<script>
+function calc(){
+  const w = parseFloat(document.getElementById('total_weight').value||0);
+  const p = parseFloat(document.getElementById('price_per_kg').value||0);
+  const g = w*p;
+  document.getElementById('gross_amount_display').value = g.toFixed(2);
+  document.getElementById('gross_amount').value = g.toFixed(2);
+  const wage = parseFloat(document.getElementById('wage').value||0);
+  document.getElementById('net_amount').value = (g-wage).toFixed(2);
+}
+['total_weight','price_per_kg','wage'].forEach(id => {
+  document.getElementById(id).addEventListener('input', calc);
+});
+calc();
+</script>
+{% endblock %}

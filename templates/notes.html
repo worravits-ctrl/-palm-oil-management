@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>บันทึกเหตุการณ์ (Notes)</h2>
+<div style="margin-bottom:15px;">
+  <a class="btn" href="{{ url_for('notes_export') }}">📤 ส่งออก CSV</a>
+  <form action="{{ url_for('notes_import') }}" method="post" enctype="multipart/form-data" style="display:inline-block;margin-left:10px;">
+    <label>📥 นำเข้า CSV:</label>
+    <input type="file" name="file" accept=".csv" style="margin:0 5px;">
+    <button class="btn" type="submit">อัปโหลด</button>
+  </form>
+</div>
+{% if form %}
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="row">
+    {{ form.date.label }} {{ form.date(class="input", id="date_input") }}
+    <span id="thai_year" style="margin-left:10px;color:#6ed0ff;font-weight:bold;"></span>
+  </div>
+  <script>
+    function updateThaiYear(){
+      const dateVal = document.getElementById('date_input').value;
+      if(dateVal){
+        const y = parseInt(dateVal.split('-')[0]);
+        document.getElementById('thai_year').innerText = 'ปี พ.ศ. ' + (y+543);
+      }else{
+        document.getElementById('thai_year').innerText = '';
+      }
+    }
+    document.getElementById('date_input').addEventListener('input', updateThaiYear);
+    // Set default date to today and update Thai year display
+    window.onload = function() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      if(!document.getElementById('date_input').value) {
+        document.getElementById('date_input').value = yyyy + '-' + mm + '-' + dd;
+      }
+      updateThaiYear();
+    };
+  </script>
+  <div class="row">{{ form.title.label }} {{ form.title(class="input") }}</div>
+  <div class="row">{{ form.content.label }} {{ form.content(class="input") }}</div>
+  {{ form.submit(class="btn") }}
+</form>
+{% endif %}
+<table class="table" style="margin-top:1rem;">
+  <thead><tr><th>วันที่</th><th>หัวข้อ</th><th>รายละเอียด</th><th>จัดการ</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ (r.date.day|string).zfill(2) }}/{{ (r.date.month|string).zfill(2) }}/{{ r.date.year + 543 }}</td>
+      <td>{{ r.title }}</td>
+      <td>{{ r.content }}</td>
+      <td>
+        <a class="btn edit" href="{{ url_for('note_edit', id=r.id) }}" style="margin-right:5px;">แก้ไข</a>
+        <form method="post" action="{{ url_for('note_delete', id=r.id) }}" style="display:inline;" onsubmit="return confirm('ยืนยันการลบบันทึกนี้?');">
+          <button class="btn delete" type="submit">ลบ</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

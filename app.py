@@ -1,0 +1,598 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from models import db, User, HarvestIncome, FertilizerRecord, HarvestDetail, Note, Palm
+from forms import LoginForm, RegisterForm, HarvestIncomeForm, FertilizerForm, HarvestDetailForm, NoteForm
+from auth import auth_bp
+from ai import ai_bp
+from datetime import date, datetime
+import os
+from config import Config
+
+# Initialize extensions
+login_manager = LoginManager()
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    
+    # Initialize extensions with app
+    db.init_app(app)
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+    
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(ai_bp)
+    
+    # Delete routes
+    @app.route("/income/delete/<int:id>", methods=["POST"])
+    @login_required
+    def income_delete(id):
+        row = db.session.get(HarvestIncome, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการลบ", "danger")
+            return redirect(url_for("income_list"))
+        db.session.delete(row)
+        db.session.commit()
+        flash("ลบรายการสำเร็จ", "success")
+        return redirect(url_for("income_list"))
+
+    @app.route("/fertilizer/delete/<int:id>", methods=["POST"])
+    @login_required
+    def fertilizer_delete(id):
+        row = db.session.get(FertilizerRecord, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการลบ", "danger")
+            return redirect(url_for("fertilizer_list"))
+        db.session.delete(row)
+        db.session.commit()
+        flash("ลบรายการสำเร็จ", "success")
+        return redirect(url_for("fertilizer_list"))
+
+    @app.route("/harvest/delete/<int:id>", methods=["POST"])
+    @login_required
+    def harvest_delete(id):
+        row = db.session.get(HarvestDetail, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการลบ", "danger")
+            return redirect(url_for("harvest_list"))
+        db.session.delete(row)
+        db.session.commit()
+        flash("ลบรายการสำเร็จ", "success")
+        return redirect(url_for("harvest_list"))
+
+    @app.route("/notes/delete/<int:id>", methods=["POST"])
+    @login_required
+    def note_delete(id):
+        row = db.session.get(Note, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการลบ", "danger")
+            return redirect(url_for("notes"))
+        db.session.delete(row)
+        db.session.commit()
+        flash("ลบรายการสำเร็จ", "success")
+        return redirect(url_for("notes"))
+
+    @app.route("/")
+    def index():
+        if current_user.is_authenticated:
+            # Calculate totals for dashboard
+            total_income = db.session.query(db.func.sum(HarvestIncome.net_amount)).scalar() or 0
+            total_expense = db.session.query(db.func.sum(FertilizerRecord.total_amount)).scalar() or 0
+            total_bunches = db.session.query(db.func.sum(HarvestDetail.bunch_count)).scalar() or 0
+            return render_template("index.html", 
+                                 total_income=total_income,
+                                 total_expense=total_expense,
+                                 total_bunches=total_bunches)
+        return redirect(url_for("auth.login"))
+
+    # ------- Income Routes -------
+    @app.route("/income/new", methods=["GET", "POST"])
+    @login_required
+    def income_new():
+        form = HarvestIncomeForm()
+        form.date.data = date.today()  # Set default date
+        
+        if form.validate_on_submit():
+            # Calculate net amount automatically
+            net = form.gross_amount.data - form.harvesting_wage.data
+            
+            row = HarvestIncome(
+                date=form.date.data,
+                total_weight_kg=form.total_weight_kg.data,
+                price_per_kg=form.price_per_kg.data,
+                gross_amount=form.gross_amount.data,
+                harvesting_wage=form.harvesting_wage.data,
+                net_amount=net,
+                note=form.note.data or None
+            )
+            db.session.add(row)
+            db.session.commit()
+            flash("บันทึกรายได้สำเร็จ", "success")
+            return redirect(url_for("income_list"))
+        return render_template("income_form.html", form=form)
+
+    @app.route("/income/edit/<int:id>", methods=["GET", "POST"])
+    @login_required
+    def income_edit(id):
+        row = db.session.get(HarvestIncome, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการแก้ไข", "danger")
+            return redirect(url_for("income_list"))
+        form = HarvestIncomeForm(obj=row)
+        if form.validate_on_submit():
+            # Calculate net amount automatically
+            net = form.gross_amount.data - form.harvesting_wage.data
+            
+            row.date = form.date.data
+            row.total_weight_kg = form.total_weight_kg.data
+            row.price_per_kg = form.price_per_kg.data
+            row.gross_amount = form.gross_amount.data
+            row.harvesting_wage = form.harvesting_wage.data
+            row.net_amount = net
+            row.note = form.note.data or None
+            db.session.commit()
+            flash("แก้ไขรายการสำเร็จ", "success")
+            return redirect(url_for("income_list"))
+        return render_template("income_form.html", form=form)
+
+    @app.route("/income")
+    @login_required
+    def income_list():
+        rows = HarvestIncome.query.order_by(HarvestIncome.date.desc(), HarvestIncome.id.desc()).all()
+        return render_template("income_list.html", rows=rows)
+
+    @app.route("/income/export")
+    @login_required
+    def income_export():
+        import pandas as pd
+        from io import BytesIO
+        
+        # ใช้ SQLAlchemy connection แทน
+        with db.engine.connect() as conn:
+            query = "SELECT * FROM harvest_income"
+            df = pd.read_sql(query, conn)
+        
+        # สร้าง CSV ใน memory
+        output = BytesIO()
+        df.to_csv(output, index=False, encoding="utf-8-sig")
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='harvest_income.csv'
+        )
+
+    @app.route("/income/import", methods=["POST"])
+    @login_required
+    def income_import():
+        import pandas as pd
+        f = request.files.get("file")
+        if not f:
+            flash("ไม่พบไฟล์", "warning")
+            return redirect(url_for("income_list"))
+        
+        try:
+            df = pd.read_csv(f)
+            count = 0
+            for _, r in df.iterrows():
+                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                if pd.isna(r.get("date")) or pd.isna(r.get("total_weight_kg")):
+                    continue
+                    
+                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                try:
+                    if isinstance(r["date"], str):
+                        # รองรับรูปแบบ d/m/yyyy หรือ dd/mm/yyyy
+                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    else:
+                        date_val = pd.to_datetime(r["date"]).date()
+                except:
+                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
+                
+                row = HarvestIncome(
+                    date=date_val,
+                    total_weight_kg=float(r["total_weight_kg"]),
+                    price_per_kg=float(r["price_per_kg"]),
+                    gross_amount=float(r["gross_amount"]),
+                    harvesting_wage=float(r["harvesting_wage"]),
+                    net_amount=float(r["net_amount"]),
+                    note=(str(r["note"]) if "note" in r and pd.notna(r["note"]) else None)
+                )
+                db.session.add(row)
+                count += 1
+            db.session.commit()
+            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+        except Exception as e:
+            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+        return redirect(url_for("income_list"))
+
+    # ------- Fertilizer -------
+    @app.route("/fertilizer/new", methods=["GET","POST"])
+    @login_required
+    def fertilizer_new():
+        form = FertilizerForm()
+        if form.validate_on_submit():
+            spreading_wage = form.spreading_wage.data or 0
+            total = form.sacks.data * form.unit_price.data + spreading_wage
+            row = FertilizerRecord(
+                date=form.date.data,
+                item=form.item.data.strip(),
+                sacks=form.sacks.data,
+                unit_price=form.unit_price.data,
+                spreading_wage=spreading_wage,
+                total_amount=total,
+                note=form.note.data or None
+            )
+            db.session.add(row)
+            db.session.commit()
+            flash("บันทึกรายการปุ๋ยสำเร็จ", "success")
+            return redirect(url_for("fertilizer_list"))
+        return render_template("fertilizer_form.html", form=form)
+
+    @app.route("/fertilizer/edit/<int:id>", methods=["GET", "POST"])
+    @login_required
+    def fertilizer_edit(id):
+        row = db.session.get(FertilizerRecord, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการแก้ไข", "danger")
+            return redirect(url_for("fertilizer_list"))
+        form = FertilizerForm(obj=row)
+        if form.validate_on_submit():
+            spreading_wage = form.spreading_wage.data or 0
+            total = form.sacks.data * form.unit_price.data + spreading_wage
+            row.date = form.date.data
+            row.item = form.item.data.strip()
+            row.sacks = form.sacks.data
+            row.unit_price = form.unit_price.data
+            row.spreading_wage = spreading_wage
+            row.total_amount = total
+            row.note = form.note.data or None
+            db.session.commit()
+            flash("แก้ไขรายการปุ๋ยสำเร็จ", "success")
+            return redirect(url_for("fertilizer_list"))
+        return render_template("fertilizer_form.html", form=form)
+
+    @app.route("/fertilizer")
+    @login_required
+    def fertilizer_list():
+        rows = FertilizerRecord.query.order_by(FertilizerRecord.date.desc(), FertilizerRecord.id.desc()).all()
+        return render_template("fertilizer_list.html", rows=rows)
+
+    @app.route("/fertilizer/export")
+    @login_required
+    def fertilizer_export():
+        import pandas as pd
+        from io import BytesIO
+        
+        # ใช้ SQLAlchemy connection แทน
+        with db.engine.connect() as conn:
+            query = "SELECT * FROM fertilizer_records"
+            df = pd.read_sql(query, conn)
+        
+        # สร้าง CSV ใน memory
+        output = BytesIO()
+        df.to_csv(output, index=False, encoding="utf-8-sig")
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='fertilizer_records.csv'
+        )
+
+    @app.route("/fertilizer/import", methods=["POST"])
+    @login_required
+    def fertilizer_import():
+        import pandas as pd
+        f = request.files.get("file")
+        if not f:
+            flash("ไม่พบไฟล์", "warning")
+            return redirect(url_for("fertilizer_list"))
+        
+        try:
+            df = pd.read_csv(f)
+            count = 0
+            for _, r in df.iterrows():
+                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                if pd.isna(r.get("date")) or pd.isna(r.get("item")):
+                    continue
+                    
+                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                try:
+                    if isinstance(r["date"], str):
+                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    else:
+                        date_val = pd.to_datetime(r["date"]).date()
+                except:
+                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
+                
+                row = FertilizerRecord(
+                    date=date_val,
+                    item=str(r["item"]),
+                    sacks=float(r["sacks"]),
+                    unit_price=float(r["unit_price"]),
+                    spreading_wage=float(r["spreading_wage"]),
+                    total_amount=float(r["total_amount"]),
+                    note=(str(r["note"]) if "note" in r and pd.notna(r["note"]) else None)
+                )
+                db.session.add(row)
+                count += 1
+            db.session.commit()
+            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+        except Exception as e:
+            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+        return redirect(url_for("fertilizer_list"))
+
+    # ------- Harvest Detail (per tree) -------
+    @app.route("/harvest/new", methods=["GET","POST"])
+    @login_required
+    def harvest_new():
+        form = HarvestDetailForm()
+        # ดึงข้อมูลต้นปาล์มทั้งหมดเรียงตามรหัส
+        palms = Palm.query.order_by(Palm.code).all()
+        
+        if form.validate_on_submit():
+            # Find the palm by code
+            palm = Palm.query.filter_by(code=form.palm_code.data).first()
+            if not palm:
+                flash(f"ไม่พบต้นปาล์มรหัส {form.palm_code.data}", "danger")
+                return render_template("harvest_form.html", form=form, palms=palms)
+            
+            row = HarvestDetail(
+                date=form.date.data,
+                palm_id=palm.id,
+                bunch_count=form.bunch_count.data,
+                remarks=form.remarks.data or None
+            )
+            db.session.add(row)
+            db.session.commit()
+            flash("บันทึกการเก็บเกี่ยวสำเร็จ", "success")
+            return redirect(url_for("harvest_list"))
+        return render_template("harvest_form.html", form=form, palms=palms)
+
+    @app.route("/harvest/edit/<int:id>", methods=["GET", "POST"])
+    @login_required
+    def harvest_edit(id):
+        row = db.session.get(HarvestDetail, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการแก้ไข", "danger")
+            return redirect(url_for("harvest_list"))
+        form = HarvestDetailForm(obj=row)
+        # ดึงข้อมูลต้นปาล์มทั้งหมดเรียงตามรหัส
+        palms = Palm.query.order_by(Palm.code).all()
+        # Set the palm_code field from the related palm
+        form.palm_code.data = row.palm.code
+        
+        if form.validate_on_submit():
+            # Find the palm by code
+            palm = Palm.query.filter_by(code=form.palm_code.data).first()
+            if not palm:
+                flash(f"ไม่พบต้นปาล์มรหัส {form.palm_code.data}", "danger")
+                return render_template("harvest_form.html", form=form, palms=palms)
+            
+            row.date = form.date.data
+            row.palm_id = palm.id
+            row.bunch_count = form.bunch_count.data
+            row.remarks = form.remarks.data or None
+            db.session.commit()
+            flash("แก้ไขการเก็บเกี่ยวสำเร็จ", "success")
+            return redirect(url_for("harvest_list"))
+        return render_template("harvest_form.html", form=form, palms=palms)
+
+    @app.route("/harvest")
+    @login_required
+    def harvest_list():
+        # Join with Palm to get palm code และแยกข้อมูลให้ตรงกับ template
+        rows = []
+        results = db.session.execute(
+            db.select(HarvestDetail, Palm.code).join(Palm).order_by(HarvestDetail.date.desc(), HarvestDetail.id.desc())
+        ).all()
+        
+        for harvest_detail, palm_code in results:
+            rows.append((
+                harvest_detail.id,
+                harvest_detail.date,
+                palm_code,
+                harvest_detail.bunch_count,
+                harvest_detail.remarks
+            ))
+        
+        return render_template("harvest_list.html", rows=rows)
+
+    @app.route("/harvest/export")
+    @login_required
+    def harvest_export():
+        import pandas as pd
+        from io import BytesIO
+        
+        # ใช้ SQLAlchemy connection แทน พร้อม JOIN เพื่อได้รหัสต้นปาล์ม
+        with db.engine.connect() as conn:
+            query = """
+            SELECT 
+                hd.id,
+                hd.date,
+                p.code as palm_code,
+                hd.bunch_count,
+                hd.remarks
+            FROM harvest_details hd
+            LEFT JOIN palms p ON hd.palm_id = p.id
+            ORDER BY hd.date DESC, p.code
+            """
+            df = pd.read_sql(query, conn)
+        
+        # สร้าง CSV ใน memory
+        output = BytesIO()
+        df.to_csv(output, index=False, encoding="utf-8-sig")
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='harvest_details.csv'
+        )
+
+    @app.route("/harvest/import", methods=["POST"])
+    @login_required
+    def harvest_import():
+        import pandas as pd
+        f = request.files.get("file")
+        if not f:
+            flash("ไม่พบไฟล์", "warning")
+            return redirect(url_for("harvest_list"))
+        
+        try:
+            df = pd.read_csv(f)
+            count = 0
+            errors = []
+            for _, r in df.iterrows():
+                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                if pd.isna(r.get("date")) or pd.isna(r.get("palm_code")):
+                    continue
+                    
+                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                try:
+                    if isinstance(r["date"], str):
+                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    else:
+                        date_val = pd.to_datetime(r["date"]).date()
+                except:
+                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
+                
+                # Find palm by code
+                palm = Palm.query.filter_by(code=str(r["palm_code"])).first()
+                if not palm:
+                    errors.append(f"ไม่พบต้นปาล์มรหัส {r['palm_code']}")
+                    continue
+                row = HarvestDetail(
+                    date=date_val,
+                    palm_id=palm.id,
+                    bunch_count=int(r["bunch_count"]),
+                    remarks=(str(r["remarks"]) if "remarks" in r and pd.notna(r["remarks"]) else None)
+                )
+                db.session.add(row)
+                count += 1
+            db.session.commit()
+            
+            if errors:
+                flash(f"นำเข้าข้อมูลแล้ว {count} รายการ แต่มีข้อผิดพลาด: {', '.join(errors[:3])}", "warning")
+            else:
+                flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+        except Exception as e:
+            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+        return redirect(url_for("harvest_list"))
+
+    # ------- Notes -------
+    @app.route("/notes", methods=["GET","POST"])
+    @login_required
+    def notes():
+        form = NoteForm()
+        if form.validate_on_submit():
+            row = Note(
+                date=form.date.data,
+                title=form.title.data.strip(),
+                content=form.content.data.strip()
+            )
+            db.session.add(row)
+            db.session.commit()
+            flash("บันทึกโน้ตสำเร็จ", "success")
+            return redirect(url_for("notes"))
+        rows = Note.query.order_by(Note.date.desc(), Note.id.desc()).all()
+        return render_template("notes.html", form=form, rows=rows)
+
+    @app.route("/notes/edit/<int:id>", methods=["GET", "POST"])
+    @login_required
+    def note_edit(id):
+        row = db.session.get(Note, id)
+        if not row:
+            flash("ไม่พบรายการที่ต้องการแก้ไข", "danger")
+            return redirect(url_for("notes"))
+        form = NoteForm(obj=row)
+        if form.validate_on_submit():
+            row.date = form.date.data
+            row.title = form.title.data.strip()
+            row.content = form.content.data.strip()
+            db.session.commit()
+            flash("แก้ไขโน้ตสำเร็จ", "success")
+            return redirect(url_for("notes"))
+        # แสดงฟอร์มแก้ไขแยกจากฟอร์มเพิ่ม
+        rows = Note.query.order_by(Note.date.desc(), Note.id.desc()).all()
+        return render_template("notes.html", form=form, rows=rows)
+
+    @app.route("/notes/export")
+    @login_required
+    def notes_export():
+        import pandas as pd
+        from io import BytesIO
+        
+        # ใช้ SQLAlchemy connection แทน
+        with db.engine.connect() as conn:
+            query = "SELECT * FROM notes"
+            df = pd.read_sql(query, conn)
+        
+        # สร้าง CSV ใน memory
+        output = BytesIO()
+        df.to_csv(output, index=False, encoding="utf-8-sig")
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='notes.csv'
+        )
+
+    @app.route("/notes/import", methods=["POST"])
+    @login_required
+    def notes_import():
+        import pandas as pd
+        f = request.files.get("file")
+        if not f:
+            flash("ไม่พบไฟล์", "warning")
+            return redirect(url_for("notes"))
+        
+        try:
+            df = pd.read_csv(f)
+            count = 0
+            for _, r in df.iterrows():
+                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                if pd.isna(r.get("date")) or pd.isna(r.get("title")):
+                    continue
+                    
+                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                try:
+                    if isinstance(r["date"], str):
+                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    else:
+                        date_val = pd.to_datetime(r["date"]).date()
+                except:
+                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
+                
+                row = Note(
+                    date=date_val,
+                    title=str(r["title"]),
+                    content=str(r["content"]) if pd.notna(r.get("content")) else ""
+                )
+                db.session.add(row)
+                count += 1
+            db.session.commit()
+            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+        except Exception as e:
+            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+        return redirect(url_for("notes"))
+
+    return app
+
+if __name__ == "__main__":
+    app = create_app()
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True, host="0.0.0.0", port=8000)

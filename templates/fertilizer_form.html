@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>บันทึกรายการใส่ปุ๋ย</h2>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="row">
+    {{ form.date.label }} {{ form.date(class="input", value=form.date.data.strftime('%Y-%m-%d') if form.date.data else '', id="date_input") }}
+    <span id="thai_year" style="margin-left:10px;color:#6ed0ff;font-weight:bold;"></span>
+  </div>
+  <script>
+    function updateThaiYear(){
+      const dateVal = document.getElementById('date_input').value;
+      if(dateVal){
+        const y = parseInt(dateVal.split('-')[0]);
+        document.getElementById('thai_year').innerText = 'ปี พ.ศ. ' + (y+543);
+      }else{
+        document.getElementById('thai_year').innerText = '';
+      }
+    }
+    document.getElementById('date_input').addEventListener('input', updateThaiYear);
+    updateThaiYear();
+  </script>
+  <div class="row">{{ form.item.label }} {{ form.item(class="input") }}</div>
+  <div class="row">{{ form.sacks.label }} {{ form.sacks(class="input", id="sacks") }}</div>
+  <div class="row">{{ form.unit_price.label }} {{ form.unit_price(class="input", id="unit_price") }}</div>
+  <div class="row">{{ form.spreading_wage.label }} {{ form.spreading_wage(class="input", id="spreading_wage") }}</div>
+  <div class="row">รวมเป็นเงิน (บาท): <input class="input" id="total_amount" readonly></div>
+  <div class="row">{{ form.note.label }} {{ form.note(class="input") }}</div>
+  {{ form.submit(class="btn") }}
+</form>
+<script>
+function calc(){
+  const s = parseFloat(document.getElementById('sacks').value||0);
+  const u = parseFloat(document.getElementById('unit_price').value||0);
+  const w = parseFloat(document.getElementById('spreading_wage').value||0);
+  document.getElementById('total_amount').value = (s*u+w).toFixed(2);
+}
+['sacks','unit_price','spreading_wage'].forEach(id => {
+  document.getElementById(id).addEventListener('input', calc);
+});
+calc();
+</script>
+{% endblock %}

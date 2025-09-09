@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>รายการเก็บเกี่ยว (รายต้น)</h2>
+<p>
+  <a class="btn" href="{{ url_for('harvest_new') }}">+ เพิ่มรายการ</a>
+  <a class="btn" href="{{ url_for('harvest_export') }}">📤 ส่งออก CSV</a>
+</p>
+<form action="{{ url_for('harvest_import') }}" method="post" enctype="multipart/form-data" style="margin-bottom:15px;">
+  <div class="row">
+    <label>📥 นำเข้า CSV:</label>
+    <input type="file" name="file" accept=".csv" style="margin-right:10px;">
+    <button class="btn" type="submit">อัปโหลด</button>
+  </div>
+</form>
+<table class="table">
+  <thead>
+    <tr>
+      <th>วันที่</th><th>ต้นปาล์ม</th><th>จำนวนทะลาย</th><th>หมายเหตุ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for id, d, code, count, remarks in rows %}
+    <tr>
+      <td>{{ (d.day|string).zfill(2) }}/{{ (d.month|string).zfill(2) }}/{{ d.year + 543 }}</td>
+      <td>{{ code }}</td>
+      <td style="text-align:right">{{ count }}</td>
+      <td>{{ remarks or "" }}</td>
+      <td>
+        <a class="btn" href="{{ url_for('harvest_edit', id=id) }}">แก้ไข</a>
+        <form method="post" action="{{ url_for('harvest_delete', id=id) }}" style="display:inline;" onsubmit="return confirm('ยืนยันการลบ?');">
+          <button class="btn" type="submit" style="background:#e74c3c;">ลบ</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

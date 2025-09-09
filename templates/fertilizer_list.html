@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>รายการใส่ปุ๋ย</h2>
+<p>
+  <a class="btn" href="{{ url_for('fertilizer_new') }}">+ เพิ่มรายการ</a>
+  <a class="btn" href="{{ url_for('fertilizer_export') }}">📤 ส่งออก CSV</a>
+</p>
+<form action="{{ url_for('fertilizer_import') }}" method="post" enctype="multipart/form-data" style="margin-bottom:15px;">
+  <div class="row">
+    <label>📥 นำเข้า CSV:</label>
+    <input type="file" name="file" accept=".csv" style="margin-right:10px;">
+    <button class="btn" type="submit">อัปโหลด</button>
+  </div>
+</form>
+<table class="table">
+  <thead>
+    <tr>
+      <th>วันที่</th><th>รายการ</th><th>จำนวน(กระสอบ)</th>
+      <th>หน่วยละ</th><th>ค่าจ้างหว่าน</th><th>รวมเป็นเงิน</th><th>หมายเหตุ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ (r.date.day|string).zfill(2) }}/{{ (r.date.month|string).zfill(2) }}/{{ r.date.year + 543 }}</td>
+      <td>{{ r.item }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.sacks) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.unit_price) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.spreading_wage) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.total_amount) }}</td>
+      <td>{{ r.note or "" }}</td>
+      <td>
+        <a class="btn" href="{{ url_for('fertilizer_edit', id=r.id) }}">แก้ไข</a>
+        <form method="post" action="{{ url_for('fertilizer_delete', id=r.id) }}" style="display:inline;" onsubmit="return confirm('ยืนยันการลบ?');">
+          <button class="btn" type="submit" style="background:#e74c3c;">ลบ</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

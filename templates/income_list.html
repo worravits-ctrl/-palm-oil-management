@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>รายได้การตัดปาล์ม</h2>
+<p>
+  <a class="btn" href="{{ url_for('income_new') }}">+ เพิ่มรายการ</a>
+  <a class="btn" href="{{ url_for('income_export') }}">📤 ส่งออก CSV</a>
+</p>
+<form action="{{ url_for('income_import') }}" method="post" enctype="multipart/form-data" style="margin-bottom:15px;">
+  <div class="row">
+    <label>📥 นำเข้า CSV:</label>
+    <input type="file" name="file" accept=".csv" style="margin-right:10px;">
+    <button class="btn" type="submit">อัปโหลด</button>
+  </div>
+</form>
+<table class="table">
+  <thead>
+    <tr>
+      <th>วันที่ขายปาล์ม</th><th>น้ำหนักรวม(กก.)</th><th>ราคาต่อกก.</th>
+      <th>รวมเป็นเงิน</th><th>ค่าจ้าง</th><th>ยอดคงเหลือ</th><th>หมายเหตุ</th><th>จัดการ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+  <td>{{ (r.date.day|string).zfill(2) }}/{{ (r.date.month|string).zfill(2) }}/{{ r.date.year + 543 }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.total_weight_kg) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.price_per_kg) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.gross_amount) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.harvesting_wage) }}</td>
+      <td style="text-align:right">{{ "%.2f"|format(r.net_amount) }}</td>
+      <td>{{ r.note or "" }}</td>
+      <td>
+        <a class="btn edit" href="{{ url_for('income_edit', id=r.id) }}" style="margin-right:5px;">แก้ไข</a>
+        <form method="post" action="{{ url_for('income_delete', id=r.id) }}" style="display:inline;" onsubmit="return confirm('ยืนยันการลบรายการนี้?');">
+          <button class="btn delete" type="submit">ลบ</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>บันทึกรายการเก็บเกี่ยว (รายต้น)</h2>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="row">
+    {{ form.date.label }} {{ form.date(class="input", value=form.date.data.strftime('%Y-%m-%d') if form.date.data else '', id="date_input") }}
+    <span id="thai_year" style="margin-left:10px;color:#6ed0ff;font-weight:bold;"></span>
+  </div>
+  <script>
+    function updateThaiYear(){
+      const dateVal = document.getElementById('date_input').value;
+      if(dateVal){
+        const y = parseInt(dateVal.split('-')[0]);
+        document.getElementById('thai_year').innerText = 'ปี พ.ศ. ' + (y+543);
+      }else{
+        document.getElementById('thai_year').innerText = '';
+      }
+    }
+    document.getElementById('date_input').addEventListener('input', updateThaiYear);
+    updateThaiYear();
+  </script>
+  <div class="row">
+    {{ form.palm_code.label }} 
+    {{ form.palm_code(class="input", list="palm_codes", placeholder="พิมพ์หรือเลือกรหัสต้นปาล์ม", id="palm_code_input", autocomplete="off") }}
+    <datalist id="palm_codes">
+      {% for palm in palms %}
+        <option value="{{ palm.code }}">{{ palm.code }}</option>
+      {% endfor %}
+    </datalist>
+    <small style="color:#666;">💡 มี {{ palms|length }} ต้น: รูปแบบ A1-L26 | พิมพ์เพื่อค้นหา</small>
+  </div>
+  
+  <!-- แสดงสถานะการค้นหา -->
+  <div class="row" id="palm_status" style="display:none;">
+    <div id="palm_found" style="color:#28a745; display:none;">
+      ✅ <span id="found_text"></span>
+    </div>
+    <div id="palm_not_found" style="color:#dc3545; display:none;">
+      ❌ ไม่พบต้นปาล์มรหัสนี้
+    </div>
+  </div>
+  
+  <script>
+    // ตรวจสอบรหัสต้นปาล์ม
+    const palmInput = document.getElementById('palm_code_input');
+    const palmOptions = Array.from(document.querySelectorAll('#palm_codes option')).map(opt => opt.value);
+    
+    palmInput.addEventListener('input', function() {
+      const value = this.value.toUpperCase();
+      this.value = value; // แปลงเป็นตัวพิมพ์ใหญ่
+      
+      const statusDiv = document.getElementById('palm_status');
+      const foundDiv = document.getElementById('palm_found');
+      const notFoundDiv = document.getElementById('palm_not_found');
+      const foundText = document.getElementById('found_text');
+      
+      if (value.length > 0) {
+        statusDiv.style.display = 'block';
+        
+        if (palmOptions.includes(value)) {
+          foundDiv.style.display = 'block';
+          notFoundDiv.style.display = 'none';
+          foundText.textContent = `พบต้นปาล์ม ${value}`;
+        } else {
+          foundDiv.style.display = 'none';
+          notFoundDiv.style.display = 'block';
+        }
+      } else {
+        statusDiv.style.display = 'none';
+      }
+    });
+    
+    // ตรวจสอบค่าเริ่มต้น
+    if (palmInput.value) {
+      palmInput.dispatchEvent(new Event('input'));
+    }
+  </script>
+  <div class="row">{{ form.bunch_count.label }} {{ form.bunch_count(class="input", placeholder="จำนวนทะลายที่เก็บได้") }}</div>
+  <div class="row">{{ form.remarks.label }} {{ form.remarks(class="input", placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)") }}</div>
+  {{ form.submit(class="btn") }}
+</form>
+
+<div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+  <h4>📋 คำแนะนำการใช้งาน:</h4>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+    <div>
+      <h5>🌳 ข้อมูลต้นปาล์ม:</h5>
+      <ul>
+        <li><strong>จำนวนรวม:</strong> {{ palms|length }} ต้น</li>
+        <li><strong>รหัสต้น:</strong> A1 ถึง L26</li>
+        <li><strong>แถว:</strong> A, B, C, D, E, F, G, H, I, J, K, L</li>
+        <li><strong>หมายเลข:</strong> 1-26</li>
+      </ul>
+    </div>
+    <div>
+      <h5>💡 วิธีการใช้:</h5>
+      <ul>
+        <li>พิมพ์รหัสโดยตรง เช่น <code>A1</code></li>
+        <li>พิมพ์บางส่วนเพื่อค้นหา เช่น <code>A</code></li>
+        <li>คลิกใน input แล้วเลือกจาก dropdown</li>
+        <li>ระบบจะตรวจสอบความถูกต้องอัตโนมัติ</li>
+      </ul>
+    </div>
+  </div>
+  
+  <div style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 4px;">
+    <strong>🔍 ตัวอย่าง:</strong> A1, B15, C26, F10, J5, L26
+  </div>
+</div>
+{% endblock %}
