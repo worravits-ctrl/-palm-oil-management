@@ -294,7 +294,7 @@ def create_app():
     @app.route("/fertilizer/export")
     @login_required
     def fertilizer_export():
-        import pandas as pd
+        
         from io import BytesIO
         
         # ใช้ SQLAlchemy connection แทน
@@ -317,7 +317,7 @@ def create_app():
     @app.route("/fertilizer/import", methods=["POST"])
     @login_required
     def fertilizer_import():
-        import pandas as pd
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
@@ -436,7 +436,7 @@ def create_app():
     @app.route("/harvest/export")
     @login_required
     def harvest_export():
-        import pandas as pd
+        
         from io import BytesIO
         
         # ใช้ SQLAlchemy connection แทน พร้อม JOIN เพื่อได้รหัสต้นปาล์ม
@@ -469,7 +469,7 @@ def create_app():
     @app.route("/harvest/import", methods=["POST"])
     @login_required
     def harvest_import():
-        import pandas as pd
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
@@ -556,7 +556,7 @@ def create_app():
     @app.route("/notes/export")
     @login_required
     def notes_export():
-        import pandas as pd
+        
         from io import BytesIO
         
         # ใช้ SQLAlchemy connection แทน
@@ -579,7 +579,7 @@ def create_app():
     @app.route("/notes/import", methods=["POST"])
     @login_required
     def notes_import():
-        import pandas as pd
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")

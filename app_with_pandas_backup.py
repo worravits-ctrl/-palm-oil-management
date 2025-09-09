@@ -149,89 +149,63 @@ def create_app():
     @app.route("/income/export")
     @login_required
     def income_export():
-        import csv
-        from io import StringIO
-        from flask import make_response
+        import pandas as pd
+        from io import BytesIO
         
-        # Query ข้อมูลรายได้พร้อม palm code
-        query = db.text("""
-            SELECT hi.sale_date, p.code as palm_area, hi.total_weight_kg, 
-                   hi.price_per_kg, hi.gross_amount, hi.harvesting_wage, 
-                   hi.net_amount, hi.note
-            FROM harvest_income hi
-            LEFT JOIN palms p ON hi.palm_id = p.id
-            ORDER BY hi.sale_date DESC
-        """)
-        result = db.session.execute(query)
-        rows = result.fetchall()
+        # ใช้ SQLAlchemy connection แทน
+        with db.engine.connect() as conn:
+            query = "SELECT * FROM harvest_income"
+            df = pd.read_sql(query, conn)
         
-        # สร้าง CSV ในหน่วยความจำ
-        output = StringIO()
-        writer = csv.writer(output)
+        # สร้าง CSV ใน memory
+        output = BytesIO()
+        df.to_csv(output, index=False, encoding="utf-8-sig")
+        output.seek(0)
         
-        # Header
-        writer.writerow(['วันที่ขาย', 'พื้นที่ปาล์ม', 'น้ำหนักรวม(กก.)', 'ราคา/กก.', 'รายได้รวม', 'ค่าแรงเก็บ', 'รายได้สุทธิ', 'หมายเหตุ'])
-        
-        # Data rows
-        for row in rows:
-            writer.writerow([
-                row.sale_date or '',
-                row.palm_area or 'ไม่ระบุ',
-                row.total_weight_kg or 0,
-                row.price_per_kg or 0,
-                row.gross_amount or 0,
-                row.harvesting_wage or 0,
-                row.net_amount or 0,
-                row.note or ''
-            ])
-        
-        # สร้าง response
-        response = make_response(output.getvalue())
-        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
-        response.headers['Content-Disposition'] = 'attachment; filename=harvest_income.csv'
-        return response
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='harvest_income.csv'
+        )
 
     @app.route("/income/import", methods=["POST"])
     @login_required
     def income_import():
-        import csv
-        from io import StringIO
-        
+        import pandas as pd
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
             return redirect(url_for("income_list"))
         
         try:
-            # อ่านไฟล์ CSV
-            stream = StringIO(f.stream.read().decode("utf8"))
-            reader = csv.DictReader(stream)
-            
+            df = pd.read_csv(f)
             count = 0
-            for row in reader:
+            for _, r in df.iterrows():
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not row.get("date") or not row.get("total_weight_kg"):
+                if pd.isna(r.get("date")) or pd.isna(r.get("total_weight_kg")):
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
-                    date_val = datetime.strptime(row["date"], '%d/%m/%Y').date()
+                    if isinstance(r["date"], str):
+                        # รองรับรูปแบบ d/m/yyyy หรือ dd/mm/yyyy
+                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    else:
+                        date_val = pd.to_datetime(r["date"]).date()
                 except:
-                    try:
-                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
-                    except:
-                        continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
+                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
                 
-                income_row = HarvestIncome(
+                row = HarvestIncome(
                     date=date_val,
-                    total_weight_kg=float(row["total_weight_kg"]),
-                    price_per_kg=float(row["price_per_kg"]),
-                    gross_amount=float(row["gross_amount"]),
-                    harvesting_wage=float(row["harvesting_wage"]),
-                    net_amount=float(row["net_amount"]),
-                    note=(row["note"] if row.get("note") else None)
+                    total_weight_kg=float(r["total_weight_kg"]),
+                    price_per_kg=float(r["price_per_kg"]),
+                    gross_amount=float(r["gross_amount"]),
+                    harvesting_wage=float(r["harvesting_wage"]),
+                    net_amount=float(r["net_amount"]),
+                    note=(str(r["note"]) if "note" in r and pd.notna(r["note"]) else None)
                 )
-                db.session.add(income_row)
+                db.session.add(row)
                 count += 1
             db.session.commit()
             flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
