@@ -23,18 +23,85 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY', 'your-google-api-key-here')
     
+    # Initialize database
+    db.init_app(app)
+    
+    # Create tables if they don't exist
+    with app.app_context():
+        db.create_all()
+        
+        # Create palm trees if they don't exist
+        if db.session.query(Palm).count() == 0:
+            # สร้างต้นปาล์ม A1-L26
+            rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+            for row in rows:
+                for col in range(1, 27):  # 1-26
+                    code = f"{row}{col}"
+                    palm = Palm(code=code)
+                    db.session.add(palm)
+            
+            try:
+                db.session.commit()
+                print(f"Created {len(rows) * 26} palm trees")
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error creating palm trees: {e}")
+    
     # Initialize extensions with app
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
+    login_manager.login_message = 'กรุณาเข้าสู่ระบบก่อนใช้งาน'
+    login_manager.login_message_category = 'info'
     
     @login_manager.user_loader
     def load_user(user_id):
         return db.session.get(User, int(user_id))
     
+    # Register error handlers
+    @app.errorhandler(500)
+    def internal_error(error):
+        db.session.rollback()
+        return f"<h1>Internal Server Error</h1><p>กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ</p><p>Error: {str(error)}</p>", 500
+    
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(ai_bp)
+    
+    # Basic routes
+    @app.route('/')
+    def index():
+        try:
+            if not current_user.is_authenticated:
+                return redirect(url_for('auth.login'))
+            
+            # Get summary statistics
+            total_income = db.session.query(db.func.sum(HarvestIncome.net_amount)).scalar() or 0
+            total_fertilizer_cost = db.session.query(db.func.sum(FertilizerRecord.total_amount)).scalar() or 0
+            total_harvest_count = db.session.query(db.func.sum(HarvestDetail.bunch_count)).scalar() or 0
+            total_palms = db.session.query(Palm).count()
+            
+            # Get recent activities (limit to prevent timeout)
+            recent_income = db.session.query(HarvestIncome).order_by(HarvestIncome.sale_date.desc()).limit(3).all()
+            recent_fertilizer = db.session.query(FertilizerRecord).order_by(FertilizerRecord.date.desc()).limit(3).all()
+            recent_harvest = db.session.query(HarvestDetail).join(Palm).order_by(HarvestDetail.date.desc()).limit(3).all()
+            recent_notes = db.session.query(Note).order_by(Note.date.desc()).limit(3).all()
+            
+            return render_template('index.html',
+                                 total_income=total_income,
+                                 total_fertilizer_cost=total_fertilizer_cost,
+                                 total_harvest_count=total_harvest_count,
+                                 total_palms=total_palms,
+                                 recent_income=recent_income,
+                                 recent_fertilizer=recent_fertilizer,
+                                 recent_harvest=recent_harvest,
+                                 recent_notes=recent_notes)
+        except Exception as e:
+            return f"<h1>Database Error</h1><p>ปัญหา: {str(e)}</p><p>กรุณารอสักครู่แล้วลองใหม่</p>", 500
+    
+    @app.route('/health')
+    def health_check():
+        return {'status': 'ok', 'message': 'Palm Oil Management System is running!'}
     
     # Delete routes
     @app.route("/income/delete/<int:id>", methods=["POST"])
