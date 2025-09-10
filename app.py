@@ -151,19 +151,6 @@ def create_app():
         flash("ลบรายการสำเร็จ", "success")
         return redirect(url_for("notes"))
 
-    @app.route("/")
-    def index():
-        if current_user.is_authenticated:
-            # Calculate totals for dashboard
-            total_income = db.session.query(db.func.sum(HarvestIncome.net_amount)).scalar() or 0
-            total_expense = db.session.query(db.func.sum(FertilizerRecord.total_amount)).scalar() or 0
-            total_bunches = db.session.query(db.func.sum(HarvestDetail.bunch_count)).scalar() or 0
-            return render_template("index.html", 
-                                 total_income=total_income,
-                                 total_expense=total_expense,
-                                 total_bunches=total_bunches)
-        return redirect(url_for("auth.login"))
-
     # ------- Income Routes -------
     @app.route("/income/new", methods=["GET", "POST"])
     @login_required
