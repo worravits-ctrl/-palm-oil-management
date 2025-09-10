@@ -213,35 +213,26 @@ def create_app():
         import csv
         from io import StringIO
         
-        # Query ข้อมูลรายได้พร้อม palm code
-        query = db.text("""
-            SELECT hi.date, p.code as palm_area, hi.total_weight_kg, 
-                   hi.price_per_kg, hi.gross_amount, hi.harvesting_wage, 
-                   hi.net_amount, hi.note
-            FROM harvest_income hi
-            LEFT JOIN palms p ON hi.palm_id = p.id
-            ORDER BY hi.date DESC
-        """)
-        result = db.session.execute(query)
-        rows = result.fetchall()
+        # ดึงข้อมูลรายได้จากฐานข้อมูล
+        rows = HarvestIncome.query.order_by(HarvestIncome.date.desc()).all()
         
         # สร้าง CSV ในหน่วยความจำ
         output = StringIO()
         writer = csv.writer(output)
         
         # Header
-        writer.writerow(['Date', 'Palm Area', 'Total Weight (kg)', 'Price per kg', 'Gross Amount', 'Harvesting Wage', 'Net Amount', 'Note'])
+        writer.writerow(['ID', 'Date', 'Total Weight (kg)', 'Price per kg', 'Gross Amount', 'Harvesting Wage', 'Net Amount', 'Note'])
         
         # Data rows
         for row in rows:
             writer.writerow([
-                row.date.strftime('%Y-%m-%d') if row.date else '',
-                row.palm_area or 'Not specified',
-                row.total_weight_kg or 0,
-                row.price_per_kg or 0,
-                row.gross_amount or 0,
-                row.harvesting_wage or 0,
-                row.net_amount or 0,
+                row.id,
+                row.date.strftime('%Y-%m-%d'),
+                row.total_weight_kg,
+                row.price_per_kg,
+                row.gross_amount,
+                row.harvesting_wage,
+                row.net_amount,
                 row.note or ''
             ])
         
