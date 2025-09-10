@@ -536,7 +536,7 @@ def create_app():
         writer = csv.writer(output)
         
         # เขียน header
-        writer.writerow(['ID', 'Date', 'Palm Code', 'Bunch Count', 'Remarks'])
+        writer.writerow(['ID', 'date', 'palm_code', 'bunch_count', 'remarks'])
         
         # เขียนข้อมูล
         for row in rows:
@@ -580,30 +580,36 @@ def create_app():
             count = 0
             errors = []
             for row in reader:
+                # รองรับทั้ง header แบบเก่าและใหม่
+                date_field = row.get("date") or row.get("Date")
+                palm_code_field = row.get("palm_code") or row.get("Palm Code")
+                bunch_count_field = row.get("bunch_count") or row.get("Bunch Count") 
+                remarks_field = row.get("remarks") or row.get("Remarks")
+                
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not row.get("date") or not row.get("palm_code"):
+                if not date_field or not palm_code_field:
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
-                    if isinstance(row["date"], str):
-                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
+                    if isinstance(date_field, str):
+                        date_val = datetime.strptime(date_field, '%Y-%m-%d').date()
                     else:
-                        date_val = row["date"]
+                        date_val = date_field
                 except:
                     continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
                 
                 # Find palm by code
-                palm = Palm.query.filter_by(code=str(row["palm_code"])).first()
+                palm = Palm.query.filter_by(code=str(palm_code_field)).first()
                 if not palm:
-                    errors.append(f"ไม่พบต้นปาล์มรหัส {row['palm_code']}")
+                    errors.append(f"ไม่พบต้นปาล์มรหัส {palm_code_field}")
                     continue
                 
                 harvest = HarvestDetail(
                     date=date_val,
                     palm_id=palm.id,
-                    bunch_count=int(row.get("bunch_count", 0)),
-                    remarks=str(row.get("remarks", "")).strip() if row.get("remarks") else None
+                    bunch_count=int(bunch_count_field or 0),
+                    remarks=str(remarks_field or "").strip() if remarks_field else None
                 )
                 db.session.add(harvest)
                 count += 1
