@@ -52,7 +52,7 @@ SYSTEM_PROMPT = (
     
     "**การคำนวณวันตัดปาล์มครั้งต่อไป:**\n"
     "• หากถาม 'ตัดปาล์มครั้งต่อไปเมื่อไหร่' ให้หาวันขายล่าสุด + 15 วัน\n"
-    "• SQL: SELECT DATE(MAX(sale_date), '+15 days') as next_harvest_date FROM harvest_income\n"
+    "• SQL: SELECT DATE(MAX(date), '+15 days') as next_harvest_date FROM harvest_income\n"
     "• หากมีข้อมูลการขาย ให้คำนวณและแสดงวันที่ครั้งต่อไป\n"
     "• แปลงเป็นปฏิทินไทย พ.ศ. พร้อมชื่อเดือนภาษาไทย\n"
     "• แสดงทั้งวันขายล่าสุดและวันตัดครั้งต่อไป\n\n"
@@ -137,7 +137,7 @@ def chat_api():
 - ใช้ DATE('now') หรือ DATE('now', 'start of month') สำหรับวันที่ปัจจุบัน
 - ใช้ subquery สำหรับการเปรียบเทียบข้อมูลข้ามตาราง
 - ใช้ CASE WHEN สำหรับการจัดหมวดหมู่ข้อมูล
-- สำหรับคำนวณวันตัดครั้งต่อไป: "SELECT MAX(sale_date) as last_sale, DATE(MAX(sale_date), '+15 days') as next_harvest FROM harvest_income"
+- สำหรับคำนวณวันตัดครั้งต่อไป: "SELECT MAX(date) as last_sale, DATE(MAX(date), '+15 days') as next_harvest FROM harvest_income"
 
 หากคำถามไม่เกี่ยวกับฐานข้อมูล ให้ sql เป็น "" และตอบโดยตรงใน summary_hint
 หากต้องการข้อมูลเปรียบเทียบ ใช้ aggregate functions และ window functions

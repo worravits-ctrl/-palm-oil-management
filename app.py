@@ -81,7 +81,7 @@ def create_app():
             total_palms = db.session.query(Palm).count()
             
             # Get recent activities (limit to prevent timeout)
-            recent_income = db.session.query(HarvestIncome).order_by(HarvestIncome.sale_date.desc()).limit(3).all()
+            recent_income = db.session.query(HarvestIncome).order_by(HarvestIncome.date.desc()).limit(3).all()
             recent_fertilizer = db.session.query(FertilizerRecord).order_by(FertilizerRecord.date.desc()).limit(3).all()
             recent_harvest = db.session.query(HarvestDetail).join(Palm).order_by(HarvestDetail.date.desc()).limit(3).all()
             recent_notes = db.session.query(Note).order_by(Note.date.desc()).limit(3).all()
@@ -216,12 +216,12 @@ def create_app():
         
         # Query ข้อมูลรายได้พร้อม palm code
         query = db.text("""
-            SELECT hi.sale_date, p.code as palm_area, hi.total_weight_kg, 
+            SELECT hi.date, p.code as palm_area, hi.total_weight_kg, 
                    hi.price_per_kg, hi.gross_amount, hi.harvesting_wage, 
                    hi.net_amount, hi.note
             FROM harvest_income hi
             LEFT JOIN palms p ON hi.palm_id = p.id
-            ORDER BY hi.sale_date DESC
+            ORDER BY hi.date DESC
         """)
         result = db.session.execute(query)
         rows = result.fetchall()
@@ -236,7 +236,7 @@ def create_app():
         # Data rows
         for row in rows:
             writer.writerow([
-                row.sale_date or '',
+                row.date or '',
                 row.palm_area or 'ไม่ระบุ',
                 row.total_weight_kg or 0,
                 row.price_per_kg or 0,
