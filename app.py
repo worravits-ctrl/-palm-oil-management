@@ -401,39 +401,42 @@ def create_app():
     @app.route("/fertilizer/import", methods=["POST"])
     @login_required
     def fertilizer_import():
-        import pandas as pd
+        import csv
+        from io import StringIO
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
             return redirect(url_for("fertilizer_list"))
         
         try:
-            df = pd.read_csv(f)
+            # อ่านไฟล์ CSV
+            stream = StringIO(f.stream.read().decode("utf8"))
+            reader = csv.DictReader(stream)
+            
             count = 0
-            for _, r in df.iterrows():
+            for row in reader:
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if pd.isna(r.get("date")) or pd.isna(r.get("item")):
+                if not row.get("date") or not row.get("item"):
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
-                    if isinstance(r["date"], str):
-                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    if isinstance(row["date"], str):
+                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
                     else:
-                        date_val = pd.to_datetime(r["date"]).date()
+                        date_val = row["date"]
                 except:
                     continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
                 
-                row = FertilizerRecord(
+                fertilizer = FertilizerRecord(
                     date=date_val,
-                    item=str(r["item"]),
-                    sacks=float(r["sacks"]),
-                    unit_price=float(r["unit_price"]),
-                    spreading_wage=float(r["spreading_wage"]),
-                    total_amount=float(r["total_amount"]),
-                    note=(str(row["note"]) if row.get("note") and row["note"].strip() else None)
+                    fertilizer_type=str(row["item"]),
+                    amount=float(row.get("sacks", 0)),
+                    cost=float(row.get("unit_price", 0)),
+                    notes=str(row.get("note", "")).strip() if row.get("note") else None
                 )
-                db.session.add(row)
+                db.session.add(fertilizer)
                 count += 1
             db.session.commit()
             flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
@@ -568,42 +571,48 @@ def create_app():
     @app.route("/harvest/import", methods=["POST"])
     @login_required
     def harvest_import():
-        import pandas as pd
+        import csv
+        from io import StringIO
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
             return redirect(url_for("harvest_list"))
         
         try:
-            df = pd.read_csv(f)
+            # อ่านไฟล์ CSV
+            stream = StringIO(f.stream.read().decode("utf8"))
+            reader = csv.DictReader(stream)
+            
             count = 0
             errors = []
-            for _, r in df.iterrows():
+            for row in reader:
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if pd.isna(r.get("date")) or pd.isna(r.get("palm_code")):
+                if not row.get("date") or not row.get("palm_code"):
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
-                    if isinstance(r["date"], str):
-                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    if isinstance(row["date"], str):
+                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
                     else:
-                        date_val = pd.to_datetime(r["date"]).date()
+                        date_val = row["date"]
                 except:
                     continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
                 
                 # Find palm by code
-                palm = Palm.query.filter_by(code=str(r["palm_code"])).first()
+                palm = Palm.query.filter_by(code=str(row["palm_code"])).first()
                 if not palm:
-                    errors.append(f"ไม่พบต้นปาล์มรหัส {r['palm_code']}")
+                    errors.append(f"ไม่พบต้นปาล์มรหัส {row['palm_code']}")
                     continue
-                row = HarvestDetail(
+                
+                harvest = HarvestDetail(
                     date=date_val,
                     palm_id=palm.id,
-                    bunch_count=int(r["bunch_count"]),
-                    remarks=(str(row["remarks"]) if row.get("remarks") and row["remarks"].strip() else None)
+                    bunch_count=int(row.get("bunch_count", 0)),
+                    remarks=str(row.get("remarks", "")).strip() if row.get("remarks") else None
                 )
-                db.session.add(row)
+                db.session.add(harvest)
                 count += 1
             db.session.commit()
             
@@ -693,35 +702,40 @@ def create_app():
     @app.route("/notes/import", methods=["POST"])
     @login_required
     def notes_import():
-        import pandas as pd
+        import csv
+        from io import StringIO
+        
         f = request.files.get("file")
         if not f:
             flash("ไม่พบไฟล์", "warning")
             return redirect(url_for("notes"))
         
         try:
-            df = pd.read_csv(f)
+            # อ่านไฟล์ CSV
+            stream = StringIO(f.stream.read().decode("utf8"))
+            reader = csv.DictReader(stream)
+            
             count = 0
-            for _, r in df.iterrows():
+            for row in reader:
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if pd.isna(r.get("date")) or pd.isna(r.get("title")):
+                if not row.get("date") or not row.get("title"):
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
-                    if isinstance(r["date"], str):
-                        date_val = pd.to_datetime(r["date"], dayfirst=True).date()
+                    if isinstance(row["date"], str):
+                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
                     else:
-                        date_val = pd.to_datetime(r["date"]).date()
+                        date_val = row["date"]
                 except:
                     continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
                 
-                row = Note(
+                note = Note(
                     date=date_val,
-                    title=str(r["title"]),
-                    content=str(row["content"]) if row.get("content") and row["content"].strip() else ""
+                    title=str(row["title"]),
+                    content=str(row.get("content", "")).strip() if row.get("content") else ""
                 )
-                db.session.add(row)
+                db.session.add(note)
                 count += 1
             db.session.commit()
             flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
@@ -733,10 +747,6 @@ def create_app():
 
 # Create application instance for production deployment
 app = create_app()
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == "__main__":
     with app.app_context():
