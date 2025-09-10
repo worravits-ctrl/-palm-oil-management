@@ -212,7 +212,6 @@ def create_app():
     def income_export():
         import csv
         from io import StringIO
-        from flask import make_response
         
         # Query ข้อมูลรายได้พร้อม palm code
         query = db.text("""
@@ -231,13 +230,13 @@ def create_app():
         writer = csv.writer(output)
         
         # Header
-        writer.writerow(['วันที่ขาย', 'พื้นที่ปาล์ม', 'น้ำหนักรวม(กก.)', 'ราคา/กก.', 'รายได้รวม', 'ค่าแรงเก็บ', 'รายได้สุทธิ', 'หมายเหตุ'])
+        writer.writerow(['Date', 'Palm Area', 'Total Weight (kg)', 'Price per kg', 'Gross Amount', 'Harvesting Wage', 'Net Amount', 'Note'])
         
         # Data rows
         for row in rows:
             writer.writerow([
-                row.date or '',
-                row.palm_area or 'ไม่ระบุ',
+                row.date.strftime('%Y-%m-%d') if row.date else '',
+                row.palm_area or 'Not specified',
                 row.total_weight_kg or 0,
                 row.price_per_kg or 0,
                 row.gross_amount or 0,
@@ -246,11 +245,18 @@ def create_app():
                 row.note or ''
             ])
         
-        # สร้าง response
-        response = make_response(output.getvalue())
-        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
-        response.headers['Content-Disposition'] = 'attachment; filename=harvest_income.csv'
-        return response
+        # แปลงเป็น bytes สำหรับ send_file
+        from io import BytesIO
+        output_bytes = BytesIO()
+        output_bytes.write(output.getvalue().encode('utf-8-sig'))
+        output_bytes.seek(0)
+        
+        return send_file(
+            output_bytes,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='harvest_income.csv'
+        )
 
     @app.route("/income/import", methods=["POST"])
     @login_required
@@ -355,21 +361,38 @@ def create_app():
     @app.route("/fertilizer/export")
     @login_required
     def fertilizer_export():
-        import pandas as pd
-        from io import BytesIO
+        import csv
+        from io import StringIO
         
-        # ใช้ SQLAlchemy connection แทน
-        with db.engine.connect() as conn:
-            query = "SELECT * FROM fertilizer_records"
-            df = pd.read_sql(query, conn)
+        # ดึงข้อมูลจากฐานข้อมูล
+        rows = FertilizerRecord.query.order_by(FertilizerRecord.date.desc()).all()
         
         # สร้าง CSV ใน memory
-        output = BytesIO()
-        df.to_csv(output, index=False, encoding="utf-8-sig")
-        output.seek(0)
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # เขียน header
+        writer.writerow(['ID', 'Date', 'Type', 'Amount', 'Cost', 'Notes'])
+        
+        # เขียนข้อมูล
+        for row in rows:
+            writer.writerow([
+                row.id,
+                row.date.strftime('%Y-%m-%d'),
+                row.fertilizer_type,
+                row.amount,
+                row.cost,
+                row.notes or ''
+            ])
+        
+        # แปลงเป็น bytes สำหรับ send_file
+        from io import BytesIO
+        output_bytes = BytesIO()
+        output_bytes.write(output.getvalue().encode('utf-8-sig'))
+        output_bytes.seek(0)
         
         return send_file(
-            output,
+            output_bytes,
             mimetype='text/csv',
             as_attachment=True,
             download_name='fertilizer_records.csv'
@@ -497,31 +520,46 @@ def create_app():
     @app.route("/harvest/export")
     @login_required
     def harvest_export():
-        import pandas as pd
-        from io import BytesIO
+        import csv
+        from io import StringIO
         
-        # ใช้ SQLAlchemy connection แทน พร้อม JOIN เพื่อได้รหัสต้นปาล์ม
-        with db.engine.connect() as conn:
-            query = """
-            SELECT 
-                hd.id,
-                hd.date,
-                p.code as palm_code,
-                hd.bunch_count,
-                hd.remarks
-            FROM harvest_details hd
-            LEFT JOIN palms p ON hd.palm_id = p.id
-            ORDER BY hd.date DESC, p.code
-            """
-            df = pd.read_sql(query, conn)
+        # ดึงข้อมูลจากฐานข้อมูล พร้อม JOIN เพื่อได้รหัสต้นปาล์ม
+        query = db.session.query(
+            HarvestDetail.id,
+            HarvestDetail.date,
+            Palm.code.label('palm_code'),
+            HarvestDetail.bunch_count,
+            HarvestDetail.remarks
+        ).join(Palm, HarvestDetail.palm_id == Palm.id)\
+         .order_by(HarvestDetail.date.desc(), Palm.code)
+        
+        rows = query.all()
         
         # สร้าง CSV ใน memory
-        output = BytesIO()
-        df.to_csv(output, index=False, encoding="utf-8-sig")
-        output.seek(0)
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # เขียน header
+        writer.writerow(['ID', 'Date', 'Palm Code', 'Bunch Count', 'Remarks'])
+        
+        # เขียนข้อมูล
+        for row in rows:
+            writer.writerow([
+                row.id,
+                row.date.strftime('%Y-%m-%d'),
+                row.palm_code,
+                row.bunch_count,
+                row.remarks or ''
+            ])
+        
+        # แปลงเป็น bytes สำหรับ send_file
+        from io import BytesIO
+        output_bytes = BytesIO()
+        output_bytes.write(output.getvalue().encode('utf-8-sig'))
+        output_bytes.seek(0)
         
         return send_file(
-            output,
+            output_bytes,
             mimetype='text/csv',
             as_attachment=True,
             download_name='harvest_details.csv'
@@ -617,21 +655,36 @@ def create_app():
     @app.route("/notes/export")
     @login_required
     def notes_export():
-        import pandas as pd
-        from io import BytesIO
+        import csv
+        from io import StringIO
         
-        # ใช้ SQLAlchemy connection แทน
-        with db.engine.connect() as conn:
-            query = "SELECT * FROM notes"
-            df = pd.read_sql(query, conn)
+        # ดึงข้อมูลจากฐานข้อมูล
+        rows = Note.query.order_by(Note.date.desc()).all()
         
         # สร้าง CSV ใน memory
-        output = BytesIO()
-        df.to_csv(output, index=False, encoding="utf-8-sig")
-        output.seek(0)
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # เขียน header
+        writer.writerow(['ID', 'Date', 'Title', 'Content'])
+        
+        # เขียนข้อมูล
+        for row in rows:
+            writer.writerow([
+                row.id,
+                row.date.strftime('%Y-%m-%d'),
+                row.title,
+                row.content or ''
+            ])
+        
+        # แปลงเป็น bytes สำหรับ send_file
+        from io import BytesIO
+        output_bytes = BytesIO()
+        output_bytes.write(output.getvalue().encode('utf-8-sig'))
+        output_bytes.seek(0)
         
         return send_file(
-            output,
+            output_bytes,
             mimetype='text/csv',
             as_attachment=True,
             download_name='notes.csv'
