@@ -6,14 +6,22 @@ from auth import auth_bp
 from ai import ai_bp
 from datetime import date, datetime
 import os
-from config import Config
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Initialize extensions
 login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)
+    
+    # Configuration
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///palm_farm.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY', 'your-google-api-key-here')
     
     # Initialize extensions with app
     db.init_app(app)
@@ -347,7 +355,7 @@ def create_app():
                     unit_price=float(r["unit_price"]),
                     spreading_wage=float(r["spreading_wage"]),
                     total_amount=float(r["total_amount"]),
-                    note=(str(r["note"]) if "note" in r and pd.notna(r["note"]) else None)
+                    note=(str(row["note"]) if row.get("note") and row["note"].strip() else None)
                 )
                 db.session.add(row)
                 count += 1
@@ -502,7 +510,7 @@ def create_app():
                     date=date_val,
                     palm_id=palm.id,
                     bunch_count=int(r["bunch_count"]),
-                    remarks=(str(r["remarks"]) if "remarks" in r and pd.notna(r["remarks"]) else None)
+                    remarks=(str(row["remarks"]) if row.get("remarks") and row["remarks"].strip() else None)
                 )
                 db.session.add(row)
                 count += 1
@@ -605,7 +613,7 @@ def create_app():
                 row = Note(
                     date=date_val,
                     title=str(r["title"]),
-                    content=str(r["content"]) if pd.notna(r.get("content")) else ""
+                    content=str(row["content"]) if row.get("content") and row["content"].strip() else ""
                 )
                 db.session.add(row)
                 count += 1
@@ -619,6 +627,10 @@ def create_app():
 
 # Create application instance for production deployment
 app = create_app()
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == "__main__":
     with app.app_context():
