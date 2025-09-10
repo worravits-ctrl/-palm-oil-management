@@ -431,10 +431,12 @@ def create_app():
                 
                 fertilizer = FertilizerRecord(
                     date=date_val,
-                    fertilizer_type=str(row["item"]),
-                    amount=float(row.get("sacks", 0)),
-                    cost=float(row.get("unit_price", 0)),
-                    notes=str(row.get("note", "")).strip() if row.get("note") else None
+                    item=str(row["item"]),
+                    sacks=float(row.get("sacks", 0)),
+                    unit_price=float(row.get("unit_price", 0)),
+                    spreading_wage=float(row.get("spreading_wage", 0)),
+                    total_amount=float(row.get("sacks", 0)) * float(row.get("unit_price", 0)) + float(row.get("spreading_wage", 0)),
+                    note=str(row.get("note", "")).strip() if row.get("note") else None
                 )
                 db.session.add(fertilizer)
                 count += 1
