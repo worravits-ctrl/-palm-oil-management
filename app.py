@@ -577,23 +577,44 @@ def create_app():
             stream = StringIO(f.stream.read().decode("utf8"))
             reader = csv.DictReader(stream)
             
+            # ตรวจสอบ headers ที่มีในไฟล์
+            headers = reader.fieldnames
+            print(f"CSV headers found: {headers}")  # สำหรับ debug
+            
             count = 0
             errors = []
+            total_rows = 0
             for row in reader:
+                total_rows += 1
+                print(f"Processing row {total_rows}: {row}")  # สำหรับ debug
+                
                 # รองรับทั้ง header แบบเก่าและใหม่
                 date_field = row.get("date") or row.get("Date")
                 palm_code_field = row.get("palm_code") or row.get("Palm Code")
                 bunch_count_field = row.get("bunch_count") or row.get("Bunch Count") 
                 remarks_field = row.get("remarks") or row.get("Remarks")
                 
+                print(f"Extracted fields - date: {date_field}, palm_code: {palm_code_field}, bunch_count: {bunch_count_field}")  # debug
+                
                 # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
                 if not date_field or not palm_code_field:
+                    print(f"Skipping row due to missing required fields")  # debug
                     continue
                     
                 # แปลงวันที่ให้รองรับรูปแบบต่างๆ
                 try:
                     if isinstance(date_field, str):
-                        date_val = datetime.strptime(date_field, '%Y-%m-%d').date()
+                        # ลองหลายรูปแบบวันที่
+                        date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
+                        date_val = None
+                        for fmt in date_formats:
+                            try:
+                                date_val = datetime.strptime(date_field, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        if date_val is None:
+                            continue  # ข้ามถ้าแปลงวันที่ไม่ได้
                     else:
                         date_val = date_field
                 except:
@@ -615,12 +636,16 @@ def create_app():
                 count += 1
             db.session.commit()
             
+            print(f"Import completed - Total rows: {total_rows}, Imported: {count}, Errors: {len(errors)}")  # debug
+            
             if errors:
                 flash(f"นำเข้าข้อมูลแล้ว {count} รายการ แต่มีข้อผิดพลาด: {', '.join(errors[:3])}", "warning")
             else:
                 flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
         except Exception as e:
+            db.session.rollback()
             flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+            print(f"Harvest import error: {str(e)}")  # สำหรับ debug
         return redirect(url_for("harvest_list"))
 
     # ------- Notes -------
