@@ -379,10 +379,10 @@ def create_app():
             writer.writerow([
                 row.id,
                 row.date.strftime('%Y-%m-%d'),
-                row.fertilizer_type,
-                row.amount,
-                row.cost,
-                row.notes or ''
+                row.item,
+                row.sacks,
+                row.unit_price,
+                row.note or ''
             ])
         
         # แปลงเป็น bytes สำหรับ send_file
