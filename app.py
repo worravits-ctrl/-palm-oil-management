@@ -47,8 +47,7 @@ def create_app():
                 db.session.rollback()
                 print(f"Error creating palm trees: {e}")
     
-    # Initialize extensions with app
-    db.init_app(app)
+    # Initialize Flask-Login
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
     login_manager.login_message = 'กรุณาเข้าสู่ระบบก่อนใช้งาน'
