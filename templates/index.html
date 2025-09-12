@@ -8,11 +8,15 @@
   </div>
   <div class="card">
     <h3>ค่าใช้จ่ายปุ๋ยรวม</h3>
-    <p>{{ "{:,.2f}".format(total_expense or 0) }} บาท</p>
+    <p>{{ "{:,.2f}".format(total_fertilizer_cost or 0) }} บาท</p>
   </div>
   <div class="card">
     <h3>จำนวนทะลายที่บันทึก</h3>
-    <p>{{ total_bunches or 0 }} ทะลาย</p>
+    <p>{{ total_harvest_count or 0 }} ทะลาย</p>
+  </div>
+  <div class="card">
+    <h3>จำนวนต้นปาล์มทั้งหมด</h3>
+    <p>{{ total_palms or 0 }} ต้น</p>
   </div>
 </div>
 <p style="margin-top:1rem;">เคล็ดลับ: ราคาปาล์มเฉลี่ย 5–10 บาท/กก. สามารถปรับในฟอร์มรายได้ตามจริงทุกครั้งที่บันทึก</p>

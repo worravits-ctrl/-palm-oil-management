@@ -8,8 +8,9 @@
 <form action="{{ url_for('fertilizer_import') }}" method="post" enctype="multipart/form-data" style="margin-bottom:15px;">
   <div class="row">
     <label>📥 นำเข้า CSV:</label>
-    <input type="file" name="file" accept=".csv" style="margin-right:10px;">
+    <input type="file" name="file" accept=".csv" required style="margin-right:10px;">
     <button class="btn" type="submit">อัปโหลด</button>
+    <small style="margin-left:10px;color:#666;">รูปแบบ: Date,Type,Amount,Cost,Notes หรือ date,item,sacks,unit_price,spreading_wage,note</small>
   </div>
 </form>
 <table class="table">

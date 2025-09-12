@@ -23,6 +23,13 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY', 'your-google-api-key-here')
     
+    # File upload configuration
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+    app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    
+    # Create upload folder if it doesn't exist
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    
     # Initialize database
     db.init_app(app)
     
@@ -261,40 +268,85 @@ def create_app():
             return redirect(url_for("income_list"))
         
         try:
-            # อ่านไฟล์ CSV
-            stream = StringIO(f.stream.read().decode("utf8"))
+            # อ่านไฟล์ CSV และรองรับ encoding หลายแบบ
+            content = None
+            encodings = ['utf-8-sig', 'utf-8', 'tis-620', 'cp874']
+            
+            for encoding in encodings:
+                try:
+                    f.stream.seek(0)
+                    content = f.stream.read().decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content is None:
+                flash("ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบรูปแบบไฟล์", "danger")
+                return redirect(url_for("income_list"))
+            
+            stream = StringIO(content)
             reader = csv.DictReader(stream)
             
             count = 0
-            for row in reader:
-                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not row.get("date") or not row.get("total_weight_kg"):
-                    continue
-                    
-                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+            errors = []
+            
+            for i, row in enumerate(reader, 1):
                 try:
-                    date_val = datetime.strptime(row["date"], '%d/%m/%Y').date()
-                except:
-                    try:
-                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
-                    except:
-                        continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
-                
-                income_row = HarvestIncome(
-                    date=date_val,
-                    total_weight_kg=float(row["total_weight_kg"]),
-                    price_per_kg=float(row["price_per_kg"]),
-                    gross_amount=float(row["gross_amount"]),
-                    harvesting_wage=float(row["harvesting_wage"]),
-                    net_amount=float(row["net_amount"]),
-                    note=(row["note"] if row.get("note") else None)
-                )
-                db.session.add(income_row)
-                count += 1
+                    # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                    date_val = row.get("date") or row.get("Date") or row.get("วันที่")
+                    weight_val = row.get("total_weight_kg") or row.get("Total Weight (kg)") or row.get("น้ำหนักรวม")
+                    
+                    if not date_val or not weight_val:
+                        continue
+                        
+                    # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                    parsed_date = None
+                    date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(str(date_val).strip(), fmt).date()
+                            break
+                        except:
+                            continue
+                    
+                    if not parsed_date:
+                        errors.append(f"แถว {i}: รูปแบบวันที่ไม่ถูกต้อง ({date_val})")
+                        continue
+                    
+                    # ดึงข้อมูลอื่นๆ
+                    price_per_kg = float(row.get("price_per_kg", 0) or row.get("Price per kg", 0) or row.get("ราคาต่อกก", 0))
+                    gross_amount = float(row.get("gross_amount", 0) or row.get("Gross Amount", 0) or row.get("รวมเป็นเงิน", 0))
+                    harvesting_wage = float(row.get("harvesting_wage", 0) or row.get("Harvesting Wage", 0) or row.get("ค่าจ้าง", 0))
+                    net_amount = float(row.get("net_amount", 0) or row.get("Net Amount", 0) or row.get("ยอดคงเหลือ", 0))
+                    note = row.get("note") or row.get("Note") or row.get("หมายเหตุ") or ""
+                    
+                    income_row = HarvestIncome(
+                        date=parsed_date,
+                        total_weight_kg=float(weight_val),
+                        price_per_kg=price_per_kg,
+                        gross_amount=gross_amount,
+                        harvesting_wage=harvesting_wage,
+                        net_amount=net_amount,
+                        note=note.strip() if note else None
+                    )
+                    db.session.add(income_row)
+                    count += 1
+                    
+                except Exception as e:
+                    errors.append(f"แถว {i}: {str(e)}")
+                    continue
+            
             db.session.commit()
-            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+            
+            if count > 0:
+                flash(f"นำเข้าข้อมูลสำเร็จ {count} รายการ", "success")
+            if errors:
+                flash(f"ข้อผิดพลาด: {'; '.join(errors[:3])}", "warning")
+                
         except Exception as e:
-            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+            flash(f"เกิดข้อผิดพลาดในการนำเข้าไฟล์: {str(e)}", "danger")
+            
         return redirect(url_for("income_list"))
 
     # ------- Fertilizer -------
@@ -400,41 +452,130 @@ def create_app():
             flash("ไม่พบไฟล์", "warning")
             return redirect(url_for("fertilizer_list"))
         
+        print(f"[DEBUG] File received: {f.filename}")  # Debug log
+        
         try:
-            # อ่านไฟล์ CSV
-            stream = StringIO(f.stream.read().decode("utf8"))
+            # อ่านไฟล์ CSV และรองรับ encoding หลายแบบ
+            content = None
+            encodings = ['utf-8-sig', 'utf-8', 'tis-620', 'cp874']
+            
+            for encoding in encodings:
+                try:
+                    f.stream.seek(0)
+                    content = f.stream.read().decode(encoding)
+                    print(f"[DEBUG] Successfully decoded with {encoding}")  # Debug log
+                    break
+                except UnicodeDecodeError:
+                    print(f"[DEBUG] Failed to decode with {encoding}")  # Debug log
+                    continue
+            
+            if content is None:
+                flash("ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบรูปแบบไฟล์", "danger")
+                return redirect(url_for("fertilizer_list"))
+            
+            print(f"[DEBUG] CSV Content:\n{content}")  # Debug log
+            
+            stream = StringIO(content)
             reader = csv.DictReader(stream)
             
+            print(f"[DEBUG] CSV Headers: {reader.fieldnames}")  # Debug log
+            
             count = 0
-            for row in reader:
-                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not row.get("date") or not row.get("item"):
-                    continue
-                    
-                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+            errors = []
+            
+            for i, row in enumerate(reader, 1):
                 try:
-                    if isinstance(row["date"], str):
-                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
-                    else:
-                        date_val = row["date"]
-                except:
-                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
-                
-                fertilizer = FertilizerRecord(
-                    date=date_val,
-                    item=str(row["item"]),
-                    sacks=float(row.get("sacks", 0)),
-                    unit_price=float(row.get("unit_price", 0)),
-                    spreading_wage=float(row.get("spreading_wage", 0)),
-                    total_amount=float(row.get("sacks", 0)) * float(row.get("unit_price", 0)) + float(row.get("spreading_wage", 0)),
-                    note=str(row.get("note", "")).strip() if row.get("note") else None
-                )
-                db.session.add(fertilizer)
-                count += 1
+                    print(f"[DEBUG] Processing row {i}: {row}")  # Debug log
+                    
+                    # ข้ามแถวที่ไม่มีข้อมูลสำคัญ - รองรับ headers หลายแบบ
+                    date_val = (row.get("date") or row.get("Date") or row.get("วันที่") or 
+                               row.get("DATE") or row.get("Date"))
+                    
+                    # รองรับ item/Type fields
+                    item_val = (row.get("item") or row.get("Item") or row.get("รายการ") or 
+                               row.get("Type") or row.get("TYPE") or row.get("type"))
+                    
+                    if not date_val or not item_val:
+                        print(f"[DEBUG] Row {i} skipped - missing required fields (date: {date_val}, item: {item_val})")  # Debug log
+                        continue
+                        
+                    # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                    parsed_date = None
+                    date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(str(date_val).strip(), fmt).date()
+                            print(f"[DEBUG] Date parsed successfully: {parsed_date}")  # Debug log
+                            break
+                        except:
+                            continue
+                    
+                    if not parsed_date:
+                        errors.append(f"แถว {i}: รูปแบบวันที่ไม่ถูกต้อง ({date_val})")
+                        print(f"[DEBUG] Date parsing failed for row {i}")  # Debug log
+                        continue
+                    
+                    # ดึงข้อมูลอื่นๆ - รองรับ field names หลายแบบ
+                    # สำหรับ sacks/Amount
+                    sacks = float(row.get("sacks", 0) or row.get("Sacks", 0) or row.get("ถุง", 0) or 
+                                 row.get("Amount", 0) or row.get("amount", 0) or 0)
+                    
+                    # สำหรับ unit_price - ถ้าไม่มีให้ใช้ Cost/Total เป็น unit_price และ spreading_wage = 0
+                    unit_price = float(row.get("unit_price", 0) or row.get("Unit Price", 0) or row.get("ราคาต่อหน่วย", 0) or 0)
+                    spreading_wage = float(row.get("spreading_wage", 0) or row.get("Spreading Wage", 0) or row.get("ค่าแรง", 0) or 0)
+                    
+                    # ถ้าไม่มี unit_price แต่มี Cost ให้ใช้ Cost เป็น total cost แทน
+                    cost_val = float(row.get("Cost", 0) or row.get("cost", 0) or row.get("ค่าใช้จ่าย", 0) or 0)
+                    
+                    if unit_price == 0 and cost_val > 0:
+                        # กรณีมี Cost แต่ไม่มี unit_price - คำนวณ unit_price จาก cost/sacks
+                        if sacks > 0:
+                            unit_price = cost_val / sacks
+                            spreading_wage = 0
+                        else:
+                            # ถ้าไม่มี sacks ให้ตั้งเป็น 1 unit และ unit_price = cost
+                            sacks = 1
+                            unit_price = cost_val
+                            spreading_wage = 0
+                    
+                    note = (row.get("note") or row.get("Note") or row.get("หมายเหตุ") or 
+                           row.get("Notes") or row.get("notes") or "")
+                    
+                    total_amount = sacks * unit_price + spreading_wage
+                    
+                    print(f"[DEBUG] Creating FertilizerRecord with: date={parsed_date}, item={item_val}, sacks={sacks}, unit_price={unit_price}, spreading_wage={spreading_wage}, total_amount={total_amount}")  # Debug log
+                    
+                    fertilizer = FertilizerRecord(
+                        date=parsed_date,
+                        item=str(item_val).strip(),
+                        sacks=sacks,
+                        unit_price=unit_price,
+                        spreading_wage=spreading_wage,
+                        total_amount=total_amount,
+                        note=note.strip() if note else None
+                    )
+                    db.session.add(fertilizer)
+                    count += 1
+                    
+                except Exception as e:
+                    errors.append(f"แถว {i}: {str(e)}")
+                    print(f"[DEBUG] Error processing row {i}: {str(e)}")  # Debug log
+                    continue
+            
             db.session.commit()
-            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+            print(f"[DEBUG] Transaction committed. Imported {count} records")  # Debug log
+            
+            if count > 0:
+                flash(f"นำเข้าข้อมูลสำเร็จ {count} รายการ", "success")
+            if errors:
+                flash(f"ข้อผิดพลาด: {'; '.join(errors[:3])}", "warning")
+                
         except Exception as e:
-            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+            db.session.rollback()
+            flash(f"เกิดข้อผิดพลาดในการนำเข้าไฟล์: {str(e)}", "danger")
+            print(f"[DEBUG] Import failed with error: {str(e)}")  # Debug log
+            
         return redirect(url_for("fertilizer_list"))
 
     # ------- Harvest Detail (per tree) -------
@@ -573,79 +714,86 @@ def create_app():
             return redirect(url_for("harvest_list"))
         
         try:
-            # อ่านไฟล์ CSV
-            stream = StringIO(f.stream.read().decode("utf8"))
-            reader = csv.DictReader(stream)
+            # อ่านไฟล์ CSV และรองรับ encoding หลายแบบ
+            content = None
+            encodings = ['utf-8-sig', 'utf-8', 'tis-620', 'cp874']
             
-            # ตรวจสอบ headers ที่มีในไฟล์
-            headers = reader.fieldnames
-            print(f"CSV headers found: {headers}")  # สำหรับ debug
+            for encoding in encodings:
+                try:
+                    f.stream.seek(0)
+                    content = f.stream.read().decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content is None:
+                flash("ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบรูปแบบไฟล์", "danger")
+                return redirect(url_for("harvest_list"))
+            
+            stream = StringIO(content)
+            reader = csv.DictReader(stream)
             
             count = 0
             errors = []
-            total_rows = 0
-            for row in reader:
-                total_rows += 1
-                print(f"Processing row {total_rows}: {row}")  # สำหรับ debug
-                
-                # รองรับทั้ง header แบบเก่าและใหม่
-                date_field = row.get("date") or row.get("Date")
-                palm_code_field = row.get("palm_code") or row.get("Palm Code")
-                bunch_count_field = row.get("bunch_count") or row.get("Bunch Count") 
-                remarks_field = row.get("remarks") or row.get("Remarks")
-                
-                print(f"Extracted fields - date: {date_field}, palm_code: {palm_code_field}, bunch_count: {bunch_count_field}")  # debug
-                
-                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not date_field or not palm_code_field:
-                    print(f"Skipping row due to missing required fields")  # debug
-                    continue
-                    
-                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+            
+            for i, row in enumerate(reader, 1):
                 try:
-                    if isinstance(date_field, str):
-                        # ลองหลายรูปแบบวันที่
-                        date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
-                        date_val = None
-                        for fmt in date_formats:
-                            try:
-                                date_val = datetime.strptime(date_field, fmt).date()
-                                break
-                            except ValueError:
-                                continue
-                        if date_val is None:
-                            continue  # ข้ามถ้าแปลงวันที่ไม่ได้
-                    else:
-                        date_val = date_field
-                except:
-                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
-                
-                # Find palm by code
-                palm = Palm.query.filter_by(code=str(palm_code_field)).first()
-                if not palm:
-                    errors.append(f"ไม่พบต้นปาล์มรหัส {palm_code_field}")
+                    # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                    date_val = row.get("date") or row.get("Date") or row.get("วันที่")
+                    palm_code_val = row.get("palm_code") or row.get("Palm Code") or row.get("รหัสต้นปาล์ม")
+                    
+                    if not date_val or not palm_code_val:
+                        continue
+                        
+                    # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                    parsed_date = None
+                    date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(str(date_val).strip(), fmt).date()
+                            break
+                        except:
+                            continue
+                    
+                    if not parsed_date:
+                        errors.append(f"แถว {i}: รูปแบบวันที่ไม่ถูกต้อง ({date_val})")
+                        continue
+                    
+                    # ค้นหาต้นปาล์มจากรหัส
+                    palm = Palm.query.filter_by(code=str(palm_code_val).strip()).first()
+                    if not palm:
+                        errors.append(f"แถว {i}: ไม่พบต้นปาล์มรหัส {palm_code_val}")
+                        continue
+                    
+                    # ดึงข้อมูลอื่นๆ
+                    bunch_count = int(row.get("bunch_count", 0) or row.get("Bunch Count", 0) or row.get("จำนวนทะลาย", 0))
+                    remarks = row.get("remarks") or row.get("Remarks") or row.get("หมายเหตุ") or ""
+                    
+                    harvest = HarvestDetail(
+                        date=parsed_date,
+                        palm_id=palm.id,
+                        bunch_count=bunch_count,
+                        remarks=remarks.strip() if remarks else None
+                    )
+                    db.session.add(harvest)
+                    count += 1
+                    
+                except Exception as e:
+                    errors.append(f"แถว {i}: {str(e)}")
                     continue
-                
-                harvest = HarvestDetail(
-                    date=date_val,
-                    palm_id=palm.id,
-                    bunch_count=int(bunch_count_field or 0),
-                    remarks=str(remarks_field or "").strip() if remarks_field else None
-                )
-                db.session.add(harvest)
-                count += 1
+            
             db.session.commit()
             
-            print(f"Import completed - Total rows: {total_rows}, Imported: {count}, Errors: {len(errors)}")  # debug
-            
+            if count > 0:
+                flash(f"นำเข้าข้อมูลสำเร็จ {count} รายการ", "success")
             if errors:
-                flash(f"นำเข้าข้อมูลแล้ว {count} รายการ แต่มีข้อผิดพลาด: {', '.join(errors[:3])}", "warning")
-            else:
-                flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+                flash(f"ข้อผิดพลาด: {'; '.join(errors[:3])}", "warning")
+                
         except Exception as e:
             db.session.rollback()
-            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
-            print(f"Harvest import error: {str(e)}")  # สำหรับ debug
+            flash(f"เกิดข้อผิดพลาดในการนำเข้าไฟล์: {str(e)}", "danger")
+            
         return redirect(url_for("harvest_list"))
 
     # ------- Notes -------
@@ -735,36 +883,77 @@ def create_app():
             return redirect(url_for("notes"))
         
         try:
-            # อ่านไฟล์ CSV
-            stream = StringIO(f.stream.read().decode("utf8"))
+            # อ่านไฟล์ CSV และรองรับ encoding หลายแบบ
+            content = None
+            encodings = ['utf-8-sig', 'utf-8', 'tis-620', 'cp874']
+            
+            for encoding in encodings:
+                try:
+                    f.stream.seek(0)
+                    content = f.stream.read().decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content is None:
+                flash("ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบรูปแบบไฟล์", "danger")
+                return redirect(url_for("notes"))
+            
+            stream = StringIO(content)
             reader = csv.DictReader(stream)
             
             count = 0
-            for row in reader:
-                # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
-                if not row.get("date") or not row.get("title"):
-                    continue
-                    
-                # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+            errors = []
+            
+            for i, row in enumerate(reader, 1):
                 try:
-                    if isinstance(row["date"], str):
-                        date_val = datetime.strptime(row["date"], '%Y-%m-%d').date()
-                    else:
-                        date_val = row["date"]
-                except:
-                    continue  # ข้ามแถวที่แปลงวันที่ไม่ได้
-                
-                note = Note(
-                    date=date_val,
-                    title=str(row["title"]),
-                    content=str(row.get("content", "")).strip() if row.get("content") else ""
-                )
-                db.session.add(note)
-                count += 1
+                    # ข้ามแถวที่ไม่มีข้อมูลสำคัญ
+                    date_val = row.get("date") or row.get("Date") or row.get("วันที่")
+                    title_val = row.get("title") or row.get("Title") or row.get("หัวข้อ")
+                    
+                    if not date_val or not title_val:
+                        continue
+                        
+                    # แปลงวันที่ให้รองรับรูปแบบต่างๆ
+                    parsed_date = None
+                    date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(str(date_val).strip(), fmt).date()
+                            break
+                        except:
+                            continue
+                    
+                    if not parsed_date:
+                        errors.append(f"แถว {i}: รูปแบบวันที่ไม่ถูกต้อง ({date_val})")
+                        continue
+                    
+                    # ดึงข้อมูลอื่นๆ
+                    content_val = row.get("content") or row.get("Content") or row.get("รายละเอียด") or ""
+                    
+                    note = Note(
+                        date=parsed_date,
+                        title=str(title_val).strip(),
+                        content=str(content_val).strip() if content_val else ""
+                    )
+                    db.session.add(note)
+                    count += 1
+                    
+                except Exception as e:
+                    errors.append(f"แถว {i}: {str(e)}")
+                    continue
+            
             db.session.commit()
-            flash(f"นำเข้าข้อมูลแล้ว {count} รายการ", "success")
+            
+            if count > 0:
+                flash(f"นำเข้าข้อมูลสำเร็จ {count} รายการ", "success")
+            if errors:
+                flash(f"ข้อผิดพลาด: {'; '.join(errors[:3])}", "warning")
+                
         except Exception as e:
-            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+            flash(f"เกิดข้อผิดพลาดในการนำเข้าไฟล์: {str(e)}", "danger")
+            
         return redirect(url_for("notes"))
 
     return app
