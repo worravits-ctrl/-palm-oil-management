@@ -1,3 +1,7 @@
+# ==========================================
+# PALM OIL MANAGEMENT SYSTEM - GITIGNORE
+# ==========================================
+
 # Python
 __pycache__/
 *.py[cod]
@@ -36,6 +40,7 @@ instance/
 *.db
 *.sqlite
 *.sqlite3
+palm_farm.db
 
 # IDE
 .vscode/
@@ -50,19 +55,91 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
-# Environment variables
+# Environment variables (SENSITIVE DATA)
 .env
+.env.local
+.env.production
+.env.staging
+
+# Configuration files with sensitive data
 config.py
+settings.py
 
 # Temporary files
 *.tmp
 *.temp
+.cache/
 
 # Uploads (user uploaded files)
 uploads/
+static/uploads/
 
-# Turso/Auth tokens (sensitive data)
+# ==========================================
+# TURSO & AUTHENTICATION (VERY SENSITIVE)
+# ==========================================
 *turso*
 *auth*
 *token*
+*secret*
+*key*
+*password*
+
+# Turso specific files
+.turso/
+turso.db
+turso.log
+
+# ==========================================
+# DEPLOYMENT & CLOUD
+# ==========================================
+# Railway
+.railway/
+# Vercel
+.vercel/
+# Render
+render.yaml.backup
+# Docker
+docker-compose.override.yml
+
+# ==========================================
+# BACKUP FILES
+# ==========================================
+*.bak
+*.backup
+backup.*
+*.old
+
+# ==========================================
+# TESTING
+# ==========================================
+.coverage
+.pytest_cache/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# ==========================================
+# NODE.JS (for CLI tools)
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# MISCELLANEOUS
+# ==========================================
+# Local development files
+debug.log
+test.db
+local.db
+
+# AI/LLM related
+*.ai
+*openai*
+*gemini*
