@@ -48,7 +48,7 @@ def test_turso_connection():
 
     # Test database connection
     try:
-        from libsql_client import create_client
+        from libsql_experimental import create_client
         print("\n🔌 Connecting to Turso database...")
 
         client = create_client(

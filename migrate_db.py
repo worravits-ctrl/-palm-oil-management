@@ -39,7 +39,7 @@ def migrate_sqlite_to_turso(sqlite_path='palm_farm.db'):
         return False
 
     try:
-        from libsql_client import create_client
+        from libsql_experimental import create_client
 
         # Connect to both databases
         print("🔌 Connecting to databases...")
