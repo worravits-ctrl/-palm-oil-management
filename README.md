@@ -1,6 +1,6 @@
 # 🌴 Palm Oil Farm Management System
 
-ระบบจัดการสวนปาล์มน้ำมันแบบครบถ้วน พร้อม AI Chatbot ด้วย Google Gemini
+ระบบจัดการสวนปาล์มน้ำมันแบบครบถ้วน พร้อม AI Chatbot ด้วย Google Gemini และรองรับ Turso Database
 
 ## ✨ ฟีเจอร์หลัก
 
@@ -40,7 +40,7 @@
 ## 🛠️ เทคโนโลยีที่ใช้
 
 - **Backend:** Flask 3.0.3
-- **Database:** SQLite with SQLAlchemy 2.0.32
+- **Database:** Turso (SQLite distributed) / SQLite local
 - **AI:** Google Gemini AI 0.8.3
 - **Frontend:** HTML5, CSS3, JavaScript
 - **Authentication:** Flask-Login
@@ -51,7 +51,7 @@
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/yourusername/palm-oil-management.git
+git clone https://github.com/worravits-ctrl/-palm-oil-management.git
 cd palm-oil-management
 ```
 
@@ -70,24 +70,138 @@ pip install -r requirements.txt
 ```
 
 ### 4. ตั้งค่า Environment Variables
-สร้างไฟล์ `.env`:
+สร้างไฟล์ `.env` จาก `.env.example`:
+```bash
+cp .env.example .env
+```
+
+แก้ไขไฟล์ `.env`:
 ```
 SECRET_KEY=your-secret-key-here
 GOOGLE_API_KEY=your-google-api-key-here
+
+# สำหรับ Turso (Production)
+TURSO_DATABASE_URL=your-turso-database-url
+TURSO_AUTH_TOKEN=your-turso-auth-token
+
+# หรือสำหรับ Local Development
+# DATABASE_URL=sqlite:///palm_farm.db
 ```
 
-### 5. สร้างฐานข้อมูล
+### 5. รันแอปพลิเคชัน
 ```bash
-python db_init.py
-python create_palms.py
-```
-
-### 6. รันแอปพลิเคชัน
-```bash
+# Development
 python app.py
+
+# หรือ Production
+python server.py
 ```
 
-เปิดเบราว์เซอร์ไปที่: http://localhost:8000
+เปิดเบราว์เซอร์ไปที่: http://localhost:5000
+
+## 🐳 การ Deploy ด้วย Docker
+
+### ใช้ Docker Compose
+```bash
+# สร้างไฟล์ .env ก่อน
+cp .env.example .env
+# แก้ไข .env ตามต้องการ
+
+# รันด้วย Docker Compose
+docker-compose up -d
+
+# หยุดการทำงาน
+docker-compose down
+```
+
+### ใช้ Docker เฉยๆ
+```bash
+# Build image
+docker build -t palm-oil-app .
+
+# รัน container
+docker run -p 5000:5000 --env-file .env palm-oil-app
+```
+
+## ☁️ การ Deploy ไป Turso + Cloud Platform
+
+### 1. สร้าง Turso Database
+```bash
+# ติดตั้ง Turso CLI
+npm install -g @tursodatabase/turso-cli
+
+# เข้าสู่ระบบ
+turso auth login
+
+# สร้าง database
+turso db create palm-oil-db
+
+# ดู database URL และ token
+turso db show palm-oil-db
+```
+
+### 2. ตั้งค่า Environment Variables
+```bash
+# ใน .env หรือ environment variables ของ cloud platform
+TURSO_DATABASE_URL=your-turso-url
+TURSO_AUTH_TOKEN=your-turso-token
+SECRET_KEY=your-secret-key
+GOOGLE_API_KEY=your-google-api-key
+```
+
+### 3. Deploy ไป Cloud Platform
+
+#### **Railway**
+```bash
+# ติดตั้ง Railway CLI
+npm install -g @railway/cli
+
+# เข้าสู่ระบบ
+railway login
+
+# Deploy
+railway deploy
+```
+
+#### **Render**
+```yaml
+# render.yaml
+services:
+  - type: web
+    name: palm-oil-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: TURSO_DATABASE_URL
+        value: your-turso-url
+      - key: TURSO_AUTH_TOKEN
+        value: your-turso-token
+      - key: SECRET_KEY
+        value: your-secret-key
+      - key: GOOGLE_API_KEY
+        value: your-google-api-key
+```
+
+#### **Vercel**
+```json
+// vercel.json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "server.py"
+    }
+  ]
+}
+```
 
 ## 📋 ข้อมูลระบบ
 

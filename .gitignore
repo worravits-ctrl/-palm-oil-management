@@ -58,3 +58,11 @@ config.py
 # Temporary files
 *.tmp
 *.temp
+
+# Uploads (user uploaded files)
+uploads/
+
+# Turso/Auth tokens (sensitive data)
+*turso*
+*auth*
+*token*

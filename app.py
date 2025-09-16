@@ -19,7 +19,20 @@ def create_app():
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///palm_farm.db'
+    
+    # Database configuration - Turso support
+    turso_url = os.environ.get('TURSO_DATABASE_URL')
+    turso_auth_token = os.environ.get('TURSO_AUTH_TOKEN')
+    
+    if turso_url and turso_auth_token:
+        # Use Turso database
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite+libsql://{turso_url}?authToken={turso_auth_token}'
+        print("✅ Using Turso database")
+    else:
+        # Fallback to local SQLite
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///palm_farm.db'
+        print("📁 Using local SQLite database")
+    
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY', 'your-google-api-key-here')
     
