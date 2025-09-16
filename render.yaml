@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: palm-oil-management
+    env: python
+    dockerfilePath: render.Dockerfile
+    envVars:
+      - key: TURSO_DATABASE_URL
+        value: your-turso-database-url
+      - key: TURSO_AUTH_TOKEN
+        value: your-turso-auth-token
+      - key: SECRET_KEY
+        value: your-secret-key-here
+      - key: GOOGLE_API_KEY
+        value: your-google-api-key-here
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+    autoDeploy: false
