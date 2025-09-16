@@ -205,24 +205,60 @@ vercel --prod
 # หรือใช้ vercel.json
 ```
 
-#### **🔧 Render (รองรับ Docker อย่างสมบูรณ์)**
-ใช้ `render.Dockerfile` ที่มีอยู่แล้ว:
-```yaml
-# render.yaml (optional)
-services:
-  - type: web
-    name: palm-oil-app
-    env: python
-    dockerfilePath: render.Dockerfile
-    envVars:
-      - key: TURSO_DATABASE_URL
-        value: your-turso-url
-      - key: TURSO_AUTH_TOKEN
-        value: your-turso-token
-      - key: SECRET_KEY
-        value: your-secret-key
-      - key: GOOGLE_API_KEY
-        value: your-google-api-key
+#### **🔧 Render (แนะนำ - รองรับ Docker และ Python อย่างสมบูรณ์)**
+
+**ทำไมถึงแนะนำ Render:**
+- ✅ รองรับ Docker และ Python web apps ได้ดี
+- ✅ Free tier เพียงพอสำหรับเริ่มต้น
+- ✅ Auto-scaling และ managed database
+- ✅ ง่ายต่อการตั้งค่าและ deploy
+- ✅ รองรับ custom domains
+
+**ขั้นตอนการ Deploy:**
+
+1. **สร้างบัญชี Render:**
+   - ไปที่ https://render.com
+   - สมัครบัญชีฟรี
+
+2. **เชื่อมต่อ GitHub:**
+   - ใน Dashboard คลิก "New" → "Web Service"
+   - เลือก "Connect GitHub" และ authorize
+   - ค้นหา repository: `worravits-ctrl/-palm-oil-management`
+
+3. **ตั้งค่า Web Service:**
+   ```
+   Name: palm-oil-management
+   Environment: Docker
+   Branch: main
+   Dockerfile Path: render.Dockerfile
+   ```
+
+4. **ตั้งค่า Environment Variables:**
+   ```
+   TURSO_DATABASE_URL → your-turso-database-url
+   TURSO_AUTH_TOKEN → your-turso-auth-token
+   SECRET_KEY → your-secret-key-here
+   GOOGLE_API_KEY → your-google-api-key-here
+   FLASK_ENV → production
+   ```
+
+5. **Deploy:**
+   - คลิก "Create Web Service"
+   - รอการ build และ deploy (ประมาณ 5-10 นาที)
+   - เมื่อเสร็จจะได้ URL: `https://your-app-name.onrender.com`
+
+**หรือใช้ render.yaml (วิธีอัตโนมัติ):**
+```bash
+# ใน Render Dashboard
+# เลือก "New" → "Blueprint"
+# Upload หรือ paste render.yaml จาก repository
+```
+
+**การตรวจสอบและแก้ปัญหา:**
+```bash
+# ดู logs ใน Render Dashboard
+# หรือใช้ Health Check endpoint
+curl https://your-app-name.onrender.com/health
 ```
 
 #### **🐳 Docker (สำหรับ Self-hosted)**
